@@ -3,6 +3,7 @@ import { serveCommand } from './commands/serve.js';
 import { scanCommand } from './commands/scan.js';
 import { auditCommand } from './commands/audit.js';
 import { reportCommand } from './commands/report.js';
+import { claudeCommand } from './commands/claude.js';
 
 const program = new Command()
   .name('palisade')
@@ -13,5 +14,6 @@ program.addCommand(serveCommand);
 program.addCommand(scanCommand);
 program.addCommand(auditCommand);
 program.addCommand(reportCommand);
+program.addCommand(claudeCommand);
 
 program.parse();
