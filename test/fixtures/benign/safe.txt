@@ -1,0 +1,5 @@
+What is the weather like today in London?
+Can you help me understand how photosynthesis works?
+Write a Python function that sorts a list of numbers.
+Tell me about the history of the Roman Empire.
+What are some good recipes for chocolate cake?
