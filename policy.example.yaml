@@ -1,0 +1,50 @@
+# Palisade Policy Configuration
+# See README.md for full documentation
+version: "1"
+
+defaults:
+  network_egress: deny
+  filesystem: read_only
+  shell_exec: deny
+
+tools:
+  weather-lookup:
+    network_egress:
+      allow:
+        - "api.openweathermap.org"
+        - "api.weatherapi.com"
+    filesystem: none
+    shell_exec: deny
+
+  document-summarizer:
+    network_egress: deny
+    filesystem:
+      read_only:
+        - "./workspace/docs/"
+    shell_exec: deny
+
+  code-runner:
+    network_egress: deny
+    filesystem:
+      read_write:
+        - "./workspace/sandbox/"
+    shell_exec:
+      allow:
+        - "python3"
+        - "node"
+      deny:
+        - "curl"
+        - "wget"
+        - "nc"
+
+detection:
+  tier1:
+    enabled: true
+    action: block
+  tier2:
+    enabled: true
+    threshold: 0.75
+    action: block
+  canary:
+    enabled: true
+    rotate_interval: 3600
