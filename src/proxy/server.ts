@@ -152,8 +152,9 @@ export class PalisadeProxy {
 
     // Forward request to upstream
     const upstreamUrl = buildUpstreamUrl(this.config.upstream, req.url ?? '/');
-    const forwardHeaders = filterHeaders(headers, ['host', 'connection', 'content-length']);
+    const forwardHeaders = filterHeaders(headers, ['host', 'connection', 'content-length', 'accept-encoding']);
     forwardHeaders['content-length'] = String(rawBody.length);
+    forwardHeaders['accept-encoding'] = 'identity'; // Request uncompressed responses from upstream
 
     let upstreamRes: Response;
     try {

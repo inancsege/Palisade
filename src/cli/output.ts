@@ -6,6 +6,11 @@ export function printBanner(): void {
   console.log(chalk.gray('  Runtime prompt injection detection\n'));
 }
 
+export function printClaudeBanner(port: number): void {
+  console.log(chalk.bold.cyan('\n  Palisade') + chalk.gray(' v0.1.0') + chalk.green(' — Security layer active'));
+  console.log(chalk.gray(`  Proxy on http://127.0.0.1:${port} → https://api.anthropic.com\n`));
+}
+
 export function printStartup(port: number, host: string, upstream: string, policyPath?: string): void {
   console.log(chalk.green('  Proxy listening on ') + chalk.bold(`http://${host}:${port}`));
   console.log(chalk.green('  Upstream:          ') + chalk.bold(upstream));
