@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DetectionEngine } from '../../../src/detection/engine.js';
 import { defaultPolicy } from '../../../src/policy/defaults.js';
-import type { ExtractedText } from '../../../src/types/proxy.js';
-
-function makeText(text: string): ExtractedText[] {
-  return [{ source: 'test', role: 'user', text }];
-}
+import { makeText } from '../../helpers/factories.js';
 
 describe('DetectionEngine', () => {
   it('should block known injection patterns', async () => {
