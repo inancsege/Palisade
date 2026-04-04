@@ -1,5 +1,6 @@
 import type { ServerResponse } from 'node:http';
 import type { LLMProvider } from './providers/base.js';
+import { logger } from '../utils/logger.js';
 
 export interface SSEEvent {
   event?: string;
@@ -25,6 +26,7 @@ export async function pipeStreamingResponse(
   clientRes: ServerResponse,
   provider: LLMProvider,
   onComplete: (fullText: string) => void,
+  requestId?: string,
 ): Promise<void> {
   if (!upstreamResponse.body) {
     clientRes.end();
@@ -65,7 +67,10 @@ export async function pipeStreamingResponse(
       }
     }
   } catch (err) {
-    // Stream interrupted — still report what we accumulated
+    logger.error(
+      { err, requestId },
+      'Error during streaming response piping',
+    );
   } finally {
     clientRes.end();
     onComplete(accumulatedText);

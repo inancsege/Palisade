@@ -218,7 +218,7 @@ export class PalisadeProxy {
     if (isStreamingResponse(responseHeaders)) {
       await pipeStreamingResponse(upstreamRes, res, provider, (fullText) => {
         logger.debug({ requestId, streamedChars: fullText.length }, 'Streaming response complete');
-      });
+      }, requestId);
     } else {
       const responseBody = Buffer.from(await upstreamRes.arrayBuffer());
       res.writeHead(upstreamRes.status, responseHeaders);
