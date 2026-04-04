@@ -1,4 +1,4 @@
-import type { VerdictAction, PatternMatch, ThreatScore } from '../types/verdict.js';
+import type { VerdictAction, ThreatScore } from '../types/verdict.js';
 
 const BLOCK_THRESHOLD = 0.7;
 const WARN_THRESHOLD = 0.5;

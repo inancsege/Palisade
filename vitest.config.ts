@@ -8,6 +8,8 @@ export default defineConfig({
       provider: 'v8',
       include: ['src/**/*.ts'],
       exclude: ['src/types/**', 'src/cli/index.ts'],
+      reporter: ['text', 'lcov'],
+      reportOnFailure: true,
     },
   },
 });

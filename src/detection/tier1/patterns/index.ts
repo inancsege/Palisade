@@ -45,6 +45,7 @@ export class PatternRegistry {
     const flags = definition.flags ?? 'gi';
     return {
       definition,
+      // eslint-disable-next-line security/detect-non-literal-regexp -- regex strings come from trusted builtin pattern definitions, not user input
       regex: new RegExp(definition.regex, flags),
     };
   }

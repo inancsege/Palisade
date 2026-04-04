@@ -152,7 +152,7 @@ export class PalisadeProxy {
             return;
           }
         }
-      } catch (parseErr) {
+      } catch {
         // Per SECF-01: Content-Type is application/json but body failed JSON.parse
         // Treat as suspicious -- block with 403 instead of silently forwarding
         const contentType = req.headers['content-type'] ?? '';
