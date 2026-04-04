@@ -61,6 +61,7 @@ export class Tier1Engine {
           tier: 1,
           category: compiled.definition.category,
           confidence: compiled.definition.baseConfidence,
+          weight: compiled.definition.weight,
           matchedText: match[0],
           offset: match.index,
           length: match[0].length,
