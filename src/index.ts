@@ -6,7 +6,7 @@ export { PatternRegistry } from './detection/tier1/patterns/index.js';
 export { computeThreatScore } from './detection/tier1/scorer.js';
 export { computeVerdict } from './detection/verdict.js';
 export { normalize, decodeEncodings } from './detection/tier1/normalizer.js';
-export { PalisadeProxy } from './proxy/server.js';
+export { PalisadeProxy, checkUnimplementedFeatures } from './proxy/server.js';
 export { loadPolicy, validatePolicy, mergePolicyWithDefaults } from './policy/loader.js';
 export { defaultPolicy } from './policy/defaults.js';
 export { EventDatabase } from './logging/database.js';
