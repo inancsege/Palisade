@@ -37,6 +37,7 @@ export interface ProxyConfig {
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   dbPath: string;
   maxBodySize: number;
+  timeout: number; // seconds
 }
 
 export interface BlockedResponse {
