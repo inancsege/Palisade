@@ -1,10 +1,10 @@
 import { Command } from 'commander';
-import { PalisadeProxy } from '../../proxy/server.js';
+import { PalisadeProxy, checkUnimplementedFeatures } from '../../proxy/server.js';
 import { loadPolicy } from '../../policy/loader.js';
 import { defaultPolicy } from '../../policy/defaults.js';
 import { resolveProxyConfig } from '../../utils/config.js';
 import { createLogger } from '../../utils/logger.js';
-import { printBanner, printStartup } from '../output.js';
+import { printBanner, printStartup, printFeatureWarnings } from '../output.js';
 
 export const serveCommand = new Command('serve')
   .description('Start the Palisade proxy server')
@@ -32,6 +32,8 @@ export const serveCommand = new Command('serve')
       }
     }
 
+    const featureWarnings = checkUnimplementedFeatures(policy, log);
+
     const proxy = new PalisadeProxy(config, policy);
 
     // Graceful shutdown
@@ -47,6 +49,7 @@ export const serveCommand = new Command('serve')
     try {
       await proxy.start();
       printStartup(config.port, config.host, config.upstream, config.policyPath);
+      printFeatureWarnings(featureWarnings);
     } catch (err) {
       log.error({ err }, 'Failed to start proxy');
       process.exit(1);

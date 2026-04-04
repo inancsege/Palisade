@@ -20,6 +20,15 @@ export function printStartup(port: number, host: string, upstream: string, polic
   console.log();
 }
 
+export function printFeatureWarnings(warnings: string[]): void {
+  for (const warning of warnings) {
+    console.log(chalk.yellow('  WARNING: ') + chalk.yellow(warning));
+  }
+  if (warnings.length > 0) {
+    console.log();
+  }
+}
+
 export function printScanResult(file: string, result: DetectionResult): void {
   if (result.matches.length === 0) return;
 

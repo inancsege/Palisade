@@ -240,3 +240,24 @@ export class PalisadeProxy {
     logger.debug({ requestId, elapsed: elapsed.toFixed(2), verdict: detectionResult?.action ?? 'passthrough' }, 'Request handled');
   }
 }
+
+export function checkUnimplementedFeatures(
+  policy: PolicyConfig,
+  log: { warn: (obj: Record<string, unknown>, msg: string) => void },
+): string[] {
+  const warnings: string[] = [];
+
+  if (policy.detection.tier2.enabled) {
+    const msg = 'tier2.enabled is set but Tier 2 ML detection is not yet implemented (planned for v2)';
+    log.warn({ feature: 'tier2' }, msg);
+    warnings.push(msg);
+  }
+
+  if (policy.detection.canary.enabled) {
+    const msg = 'canary.enabled is set but canary token detection is not yet implemented (planned for v2)';
+    log.warn({ feature: 'canary' }, msg);
+    warnings.push(msg);
+  }
+
+  return warnings;
+}
