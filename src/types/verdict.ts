@@ -15,6 +15,7 @@ export interface PatternMatch {
   tier: 1 | 2 | 3;
   category: PatternCategory;
   confidence: number;
+  weight: number;
   matchedText: string;
   offset: number;
   length: number;

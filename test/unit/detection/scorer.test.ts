@@ -9,6 +9,7 @@ function makeMatch(overrides: Partial<PatternMatch> = {}): PatternMatch {
     tier: 1,
     category: 'override_phrase',
     confidence: 0.9,
+    weight: 1.0,
     matchedText: 'test',
     offset: 0,
     length: 4,

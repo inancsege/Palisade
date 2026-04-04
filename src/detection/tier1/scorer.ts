@@ -26,7 +26,7 @@ export function computeThreatScore(matches: PatternMatch[]): ThreatScore {
   // Weighted sum: each match contributes confidence * weight, normalized
   let weightedSum = 0;
   for (const match of matches) {
-    weightedSum += match.confidence * (match.tier === 1 ? 1.0 : 0.8);
+    weightedSum += match.confidence * match.weight;
   }
   weightedSum = Math.min(1.0, weightedSum / Math.max(matches.length, 1));
 
