@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { DetectionResult, PatternMatch } from '../types/verdict.js';
+import type { DetectionResult } from '../types/verdict.js';
 
 export function printBanner(): void {
   console.log(chalk.bold.cyan('\n  Palisade') + chalk.gray(' v0.1.0'));

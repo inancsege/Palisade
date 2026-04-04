@@ -40,8 +40,11 @@ export function normalize(input: string): NormalizedInput {
   return { text, original: input };
 }
 
+// eslint-disable-next-line security/detect-unsafe-regex -- nested quantifiers are fixed-count; linear time
 const BASE64_RE = /(?:[A-Za-z0-9+/]{4}){5,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?/g;
+// eslint-disable-next-line security/detect-unsafe-regex -- [^%]* cannot match group delimiter %; linear time
 const URL_ENCODED_RE = /(?:%[0-9A-Fa-f]{2}[^%]*){3,}/g;
+// eslint-disable-next-line security/detect-unsafe-regex -- all fixed-length quantifiers; linear time
 const UNICODE_ESCAPE_RE = /(?:\\u[0-9A-Fa-f]{4}){2,}/g;
 
 export function decodeEncodings(input: string): DecodedInput[] {
