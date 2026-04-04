@@ -49,6 +49,7 @@ beforeAll(async () => {
       logLevel: 'error',
       dbPath: ':memory:',
       maxBodySize: 10 * 1024 * 1024,
+      timeout: 300,
     },
     defaultPolicy,
   );

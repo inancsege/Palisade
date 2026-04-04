@@ -86,6 +86,7 @@ export const claudeCommand = new Command('claude')
         logLevel: options.logLevel,
         dbPath: options.db,
         maxBodySize: 10 * 1024 * 1024,
+        timeout: 300,
         policyPath: options.policy,
       },
       policy,

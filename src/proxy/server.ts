@@ -193,8 +193,19 @@ export class PalisadeProxy {
         method: req.method ?? 'GET',
         headers: forwardHeaders,
         body: rawBody.length > 0 ? rawBody : undefined,
+        signal: AbortSignal.timeout(this.config.timeout * 1000),
       });
     } catch (err) {
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        res.writeHead(504, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: {
+            type: 'upstream_timeout',
+            message: `Upstream request timed out after ${this.config.timeout}s`,
+          },
+        }));
+        return;
+      }
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         error: { type: 'upstream_error', message: `Failed to reach upstream: ${(err as Error).message}` },

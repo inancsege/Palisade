@@ -9,6 +9,7 @@ const proxyConfigSchema = z.object({
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   dbPath: z.string().default('./palisade.db'),
   maxBodySize: z.coerce.number().int().min(1024).default(10 * 1024 * 1024), // 10MB
+  timeout: z.coerce.number().min(1).max(3600).default(300), // seconds
 });
 
 export function resolveProxyConfig(
@@ -22,6 +23,7 @@ export function resolveProxyConfig(
     logLevel: cliOptions.logLevel ?? process.env.PALISADE_LOG_LEVEL,
     dbPath: cliOptions.db ?? process.env.PALISADE_DB,
     maxBodySize: cliOptions.maxBodySize ?? process.env.PALISADE_MAX_BODY_SIZE,
+    timeout: cliOptions.timeout ?? process.env.PALISADE_TIMEOUT,
   };
 
   return proxyConfigSchema.parse(merged);

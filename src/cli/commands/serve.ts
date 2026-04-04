@@ -14,6 +14,7 @@ export const serveCommand = new Command('serve')
   .option('--policy <path>', 'Path to policy.yaml file')
   .option('--log-level <level>', 'Log level (debug|info|warn|error)', 'info')
   .option('--db <path>', 'Path to SQLite database file', './palisade.db')
+  .option('--timeout <seconds>', 'Upstream request timeout in seconds', '300')
   .action(async (options) => {
     printBanner();
 
