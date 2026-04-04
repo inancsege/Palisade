@@ -104,19 +104,26 @@ export class PalisadeProxy {
 
           // Log the event asynchronously
           setImmediate(() => {
-            this.eventLogger?.logEvent({
-              requestId,
-              eventType: detectionResult!.action === 'block' ? 'request_blocked'
-                : detectionResult!.action === 'warn' ? 'request_warned'
-                : 'request_scanned',
-              provider: providerType,
-              actionTaken: detectionResult!.action,
-              threatScore: detectionResult!.threatScore.overall,
-              matches: detectionResult!.matches,
-              requestPath: req.url ?? null,
-              sourceIp: req.socket.remoteAddress ?? null,
-              policyFile: this.config.policyPath ?? null,
-            });
+            try {
+              this.eventLogger?.logEvent({
+                requestId,
+                eventType: detectionResult!.action === 'block' ? 'request_blocked'
+                  : detectionResult!.action === 'warn' ? 'request_warned'
+                  : 'request_scanned',
+                provider: providerType,
+                actionTaken: detectionResult!.action,
+                threatScore: detectionResult!.threatScore.overall,
+                matches: detectionResult!.matches,
+                requestPath: req.url ?? null,
+                sourceIp: req.socket.remoteAddress ?? null,
+                policyFile: this.config.policyPath ?? null,
+              });
+            } catch (logErr) {
+              logger.error(
+                { err: logErr, requestId },
+                'Failed to log detection event',
+              );
+            }
           });
 
           // Block if verdict says so
@@ -145,8 +152,32 @@ export class PalisadeProxy {
             return;
           }
         }
-      } catch {
-        // JSON parse failed — forward as-is (might be non-JSON request)
+      } catch (parseErr) {
+        // Per SECF-01: Content-Type is application/json but body failed JSON.parse
+        // Treat as suspicious -- block with 403 instead of silently forwarding
+        const contentType = req.headers['content-type'] ?? '';
+        if (contentType.includes('application/json')) {
+          logger.warn(
+            { requestId, method: req.method, path: req.url, contentType },
+            'Blocked request with unparseable JSON body',
+          );
+          const blocked: BlockedResponse = {
+            error: {
+              type: 'unparseable_body',
+              message: 'Request Content-Type is application/json but body could not be parsed',
+              verdict: 'block',
+              threatScore: 0,
+              requestId,
+            },
+          };
+          res.writeHead(403, {
+            'Content-Type': 'application/json',
+            'X-Palisade-Request-Id': requestId,
+          });
+          res.end(JSON.stringify(blocked));
+          return;
+        }
+        // Non-JSON content type -- fall through and forward as-is
       }
     }
 
