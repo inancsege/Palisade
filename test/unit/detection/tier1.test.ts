@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Tier1Engine } from '../../../src/detection/tier1/index.js';
-import type { ExtractedText } from '../../../src/types/proxy.js';
-
-function makeText(text: string): ExtractedText[] {
-  return [{ source: 'test', role: 'user', text }];
-}
+import { makeText } from '../../helpers/factories.js';
 
 describe('Tier1Engine', () => {
   const engine = new Tier1Engine();

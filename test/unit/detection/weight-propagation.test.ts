@@ -1,22 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeThreatScore } from '../../../src/detection/tier1/scorer.js';
 import { Tier1Engine } from '../../../src/detection/tier1/index.js';
-import type { PatternMatch } from '../../../src/types/verdict.js';
-
-function makeMatch(overrides: Partial<PatternMatch> = {}): PatternMatch {
-  return {
-    patternId: 'test-pattern',
-    description: 'Test pattern',
-    tier: 1,
-    category: 'override_phrase',
-    confidence: 0.9,
-    weight: 1.0,
-    matchedText: 'test',
-    offset: 0,
-    length: 4,
-    ...overrides,
-  };
-}
+import { makeMatch } from '../../helpers/factories.js';
 
 describe('weight propagation: scorer uses match.weight', () => {
   it('high-weight match scores higher than low-weight match', () => {
