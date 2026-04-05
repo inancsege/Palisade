@@ -1,6 +1,6 @@
 import type { ExtractedText } from '../../types/proxy.js';
 import type { PatternMatch } from '../../types/verdict.js';
-import { normalize, decodeEncodings } from './normalizer.js';
+import { normalize, decodeEncodings, decodeLeetSpeak } from './normalizer.js';
 import { PatternRegistry } from './patterns/index.js';
 
 export class Tier1Engine {
@@ -43,6 +43,20 @@ export class Tier1Engine {
         m.description = `[${dec.encoding} decoded] ${m.description}`;
       }
       matches.push(...decodedMatches);
+    }
+
+    // Scan leet-decoded variant of normalized text (D-08, D-12)
+    const leetDecoded = decodeLeetSpeak(normalizedText);
+    for (const dec of leetDecoded) {
+      const leetMatches: PatternMatch[] = [];
+      this.runPatterns(dec.decoded, leetMatches);
+      for (const m of leetMatches) {
+        m.confidence = Math.min(1.0, m.confidence + 0.1);
+        m.offset = dec.originalOffset;
+        m.length = dec.originalLength;
+        m.description = `[leet decoded] ${m.description}`;
+      }
+      matches.push(...leetMatches);
     }
 
     return matches;
