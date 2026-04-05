@@ -98,6 +98,47 @@ function stripMarkdown(text: string): string {
   return text;
 }
 
+// Leet speak character map -- security-focused minimal set (per D-07)
+// Maps digit/symbol substitutions commonly used in injection attacks
+const LEET_MAP: Record<string, string> = {
+  '0': 'o',
+  '1': 'i',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '7': 't',
+  '@': 'a',
+  '$': 's',
+  '!': 'i',
+};
+
+const LEET_RE = new RegExp(
+  '[' +
+    Object.keys(LEET_MAP)
+      .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('') +
+    ']',
+  'g',
+);
+
+export function decodeLeetSpeak(input: string): DecodedInput[] {
+  if (!input) return [];
+
+  const decoded = input.replace(LEET_RE, (ch) => LEET_MAP[ch] ?? ch);
+
+  // If nothing changed, no leet characters were present
+  if (decoded === input) return [];
+
+  return [
+    {
+      encoding: 'leet',
+      decoded,
+      originalOffset: 0,
+      originalLength: input.length,
+    },
+  ];
+}
+
 const HTML_ENTITIES: Record<string, string> = {
   '&lt;': '<',
   '&gt;': '>',
