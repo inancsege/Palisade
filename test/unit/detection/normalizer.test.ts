@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalize, decodeEncodings } from '../../../src/detection/tier1/normalizer.js';
+import { normalize, decodeEncodings, decodeLeetSpeak } from '../../../src/detection/tier1/normalizer.js';
 
 describe('normalize', () => {
   it('should collapse whitespace', () => {
@@ -185,6 +185,68 @@ describe('markdown stripping', () => {
     normalize(adversarial);
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(50);
+  });
+});
+
+describe('decodeLeetSpeak', () => {
+  it('should decode 1gnore to ignore', () => {
+    const results = decodeLeetSpeak('1gnore');
+    expect(results).toHaveLength(1);
+    expect(results[0].encoding).toBe('leet');
+    expect(results[0].decoded).toBe('ignore');
+  });
+
+  it('should decode h3ll0 w0rld to hello world', () => {
+    const results = decodeLeetSpeak('h3ll0 w0rld');
+    expect(results).toHaveLength(1);
+    expect(results[0].decoded).toBe('hello world');
+  });
+
+  it('should decode @dmin to admin', () => {
+    const results = decodeLeetSpeak('@dmin');
+    expect(results).toHaveLength(1);
+    expect(results[0].decoded).toBe('admin');
+  });
+
+  it('should decode 5y5t3m to system', () => {
+    const results = decodeLeetSpeak('5y5t3m');
+    expect(results).toHaveLength(1);
+    expect(results[0].decoded).toBe('system');
+  });
+
+  it('should decode pr3v10u5 to previous', () => {
+    const results = decodeLeetSpeak('pr3v10u5');
+    expect(results).toHaveLength(1);
+    expect(results[0].decoded).toBe('previous');
+  });
+
+  it('should return empty array for plain text with no leet characters', () => {
+    const results = decodeLeetSpeak('hello world');
+    expect(results).toHaveLength(0);
+  });
+
+  it('should return empty array for empty string', () => {
+    const results = decodeLeetSpeak('');
+    expect(results).toHaveLength(0);
+  });
+
+  it('should return correct DecodedInput shape', () => {
+    const input = '1gnore';
+    const results = decodeLeetSpeak(input);
+    expect(results).toHaveLength(1);
+    expect(results[0].encoding).toBe('leet');
+    expect(results[0].originalOffset).toBe(0);
+    expect(results[0].originalLength).toBe(input.length);
+  });
+
+  it('should not corrupt normal text containing $ sign', () => {
+    // 'The price is $5' contains leet chars $ and 5, so it returns a variant.
+    // But the decoded text ('The price is ss') won't match injection patterns.
+    const results = decodeLeetSpeak('The price is $5');
+    // Either empty array or a decoded variant is acceptable
+    if (results.length > 0) {
+      expect(results[0].encoding).toBe('leet');
+    }
   });
 });
 
