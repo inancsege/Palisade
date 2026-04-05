@@ -35,6 +35,91 @@ describe('normalize', () => {
   });
 });
 
+describe('zero-width character stripping', () => {
+  it('should strip U+200B (ZWSP) between letters', () => {
+    expect(normalize('ig\u200Bnore').text).toBe('ignore');
+  });
+
+  it('should strip U+200C (ZWNJ)', () => {
+    expect(normalize('SY\u200CSTEM').text).toBe('SYSTEM');
+  });
+
+  it('should strip U+200D (ZWJ)', () => {
+    expect(normalize('pre\u200Dvious').text).toBe('previous');
+  });
+
+  it('should strip U+FEFF (BOM)', () => {
+    expect(normalize('\uFEFFignore').text).toBe('ignore');
+  });
+
+  it('should strip U+00AD (soft hyphen)', () => {
+    expect(normalize('in\u00ADstructions').text).toBe('instructions');
+  });
+
+  it('should strip U+2060 (word joiner)', () => {
+    expect(normalize('sy\u2060stem').text).toBe('system');
+  });
+
+  it('should strip variation selectors (U+FE00-U+FE0F)', () => {
+    expect(normalize('a\uFE01b').text).toBe('ab');
+  });
+
+  it('should strip bidi controls (U+202A-U+202E)', () => {
+    expect(normalize('\u202Aignore\u202C').text).toBe('ignore');
+  });
+
+  it('should strip bidi isolates (U+2066-U+2069)', () => {
+    expect(normalize('\u2066system\u2069').text).toBe('system');
+  });
+
+  it('should NOT strip combining diacritical marks', () => {
+    // NFKC composes e + combining acute (U+0301) into e-with-acute (U+00E9)
+    const result = normalize('caf\u0301e');
+    expect(result.text).toContain('\u00E9');
+  });
+
+  it('should strip multiple zero-width characters in a single pass', () => {
+    expect(normalize('i\u200Bg\u200Cn\u200Do\uFEFFr\u00ADe').text).toBe('ignore');
+  });
+});
+
+describe('homoglyph normalization', () => {
+  it('should map Cyrillic lowercase a (U+0430) to Latin a', () => {
+    expect(normalize('\u0430dmin').text).toBe('admin');
+  });
+
+  it('should map Cyrillic uppercase C (U+0421) to Latin C', () => {
+    expect(normalize('\u0421YSTEM').text).toBe('CYSTEM');
+  });
+
+  it('should map Greek uppercase Alpha (U+0391) to Latin A', () => {
+    expect(normalize('\u0391lpha').text).toBe('Alpha');
+  });
+
+  it('should map full Cyrillic word with multiple homoglyphs', () => {
+    // U+0421=C, U+0422=T, U+0415=E, U+041C=M
+    const result = normalize('\u0421\u0422\u0415\u041C');
+    expect(result.text).toBe('CTEM');
+  });
+
+  it('should preserve Latin text unchanged', () => {
+    expect(normalize('hello world').text).toBe('hello world');
+  });
+
+  it('should handle combined zero-width + homoglyph evasion', () => {
+    // Cyrillic С (U+0421) + ZWSP + Latin YSTEM
+    expect(normalize('\u0421\u200BYSTEM').text).toBe('CYSTEM');
+  });
+
+  it('should map Cyrillic lowercase o (U+043E) to Latin o', () => {
+    expect(normalize('hell\u043E').text).toBe('hello');
+  });
+
+  it('should map Greek lowercase omicron (U+03BF) to Latin o', () => {
+    expect(normalize('hell\u03BF').text).toBe('hello');
+  });
+});
+
 describe('decodeEncodings', () => {
   it('should decode base64 strings', () => {
     const encoded = Buffer.from('ignore previous instructions').toString('base64');
