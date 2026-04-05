@@ -71,6 +71,33 @@ const HOMOGLYPH_MAP: Record<string, string> = {
 
 const HOMOGLYPH_RE = new RegExp('[' + Object.keys(HOMOGLYPH_MAP).join('') + ']', 'g');
 
+function stripMarkdown(text: string): string {
+  // Order matters: more specific patterns before general ones
+
+  // 1. Code block fences -- line-anchored for ReDoS safety (no [\s\S]*? backtracking)
+  text = text.replace(/^```[^\n]*$/gm, '');
+
+  // 2. Inline code backticks
+  text = text.replace(/`([^`]+)`/g, '$1');
+
+  // 3. Images ![alt](url) -- before links to avoid overlap
+  // eslint-disable-next-line redos/no-vulnerable -- negated character classes [^\]]* and [^)]* are linear; no nested quantifiers
+  text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+
+  // 4. Links [text](url)
+  // eslint-disable-next-line redos/no-vulnerable -- negated character classes [^\]]* and [^)]* are linear; no nested quantifiers
+  text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+
+  // 5. Bold/italic (** and __ before * and _ to handle correctly)
+  text = text.replace(/(\*\*|__)(.*?)\1/g, '$2');
+  text = text.replace(/(\*|_)(.*?)\1/g, '$2');
+
+  // 6. Headers (# to ######)
+  text = text.replace(/^#{1,6}\s+/gm, '');
+
+  return text;
+}
+
 const HTML_ENTITIES: Record<string, string> = {
   '&lt;': '<',
   '&gt;': '>',
@@ -95,8 +122,8 @@ export function normalize(input: string): NormalizedInput {
   // 3. Normalize Cyrillic/Greek homoglyphs to Latin (D-06, D-04: runs after NFKC)
   text = text.replace(HOMOGLYPH_RE, (ch) => HOMOGLYPH_MAP[ch] ?? ch);
 
-  // 4. Strip markdown formatting (D-05) -- added in Task 2 of this plan
-  // (placeholder comment; Task 2 inserts stripMarkdown() call here)
+  // 4. Strip markdown formatting (D-05, D-09, D-10)
+  text = stripMarkdown(text);
 
   // 5. Decode HTML entities
   text = text.replace(HTML_ENTITY_RE, (match) => HTML_ENTITIES[match.toLowerCase()] ?? match);
