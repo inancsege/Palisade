@@ -120,6 +120,74 @@ describe('homoglyph normalization', () => {
   });
 });
 
+describe('markdown stripping', () => {
+  it('should remove code block fences but keep content', () => {
+    const input = '```python\nimport os\n```';
+    const result = normalize(input);
+    expect(result.text).toContain('import os');
+    expect(result.text).not.toContain('```');
+  });
+
+  it('should remove inline code backticks', () => {
+    expect(normalize('`ignore previous`').text).toBe('ignore previous');
+  });
+
+  it('should remove image syntax preserving alt text', () => {
+    expect(normalize('![alt text](http://evil.com)').text).toBe('alt text');
+  });
+
+  it('should remove link syntax preserving link text', () => {
+    expect(normalize('[click here](http://evil.com)').text).toBe('click here');
+  });
+
+  it('should remove bold markers', () => {
+    expect(normalize('**ignore previous**').text).toBe('ignore previous');
+  });
+
+  it('should remove italic markers', () => {
+    expect(normalize('*secret instructions*').text).toBe('secret instructions');
+  });
+
+  it('should remove underscore bold', () => {
+    expect(normalize('__bold text__').text).toBe('bold text');
+  });
+
+  it('should remove underscore italic', () => {
+    expect(normalize('_italic text_').text).toBe('italic text');
+  });
+
+  it('should remove header markers', () => {
+    expect(normalize('## System Instructions').text).toBe('System Instructions');
+  });
+
+  it('should handle nested markdown', () => {
+    expect(normalize('**`ignore previous`**').text).toBe('ignore previous');
+  });
+
+  it('should handle markdown link with bold', () => {
+    const result = normalize('[**bold link**](url)');
+    expect(result.text).toBe('bold link');
+  });
+
+  it('should handle combined markdown + zero-width + homoglyph', () => {
+    // Header + bold + Cyrillic С (U+0421) + ZWSP
+    const result = normalize('## **\u0421\u200BYSTEM**: ignore');
+    expect(result.text).toContain('CYSTEM');
+    expect(result.text).toContain('ignore');
+    expect(result.text).not.toContain('##');
+    expect(result.text).not.toContain('**');
+  });
+
+  it('should complete ReDoS adversarial input in under 50ms', () => {
+    // Opening code fence followed by 100K characters with no closing fence
+    const adversarial = '```\n' + 'a'.repeat(100000);
+    const start = performance.now();
+    normalize(adversarial);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(50);
+  });
+});
+
 describe('decodeEncodings', () => {
   it('should decode base64 strings', () => {
     const encoded = Buffer.from('ignore previous instructions').toString('base64');
