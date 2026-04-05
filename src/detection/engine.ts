@@ -11,7 +11,7 @@ export class DetectionEngine {
   private policy: DetectionPolicyConfig;
 
   constructor(policy: DetectionPolicyConfig) {
-    this.tier1 = new Tier1Engine();
+    this.tier1 = new Tier1Engine(undefined, policy.tier1.max_input_length);
     this.policy = policy;
   }
 

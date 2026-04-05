@@ -1,13 +1,16 @@
 import type { ExtractedText } from '../../types/proxy.js';
 import type { PatternMatch } from '../../types/verdict.js';
+import { logger } from '../../utils/logger.js';
 import { normalize, decodeEncodings, decodeLeetSpeak } from './normalizer.js';
 import { PatternRegistry } from './patterns/index.js';
 
 export class Tier1Engine {
   private registry: PatternRegistry;
+  private maxInputLength: number;
 
-  constructor(registry?: PatternRegistry) {
+  constructor(registry?: PatternRegistry, maxInputLength = 10000) {
     this.registry = registry ?? new PatternRegistry();
+    this.maxInputLength = maxInputLength;
   }
 
   scan(texts: ExtractedText[]): PatternMatch[] {
@@ -23,13 +26,21 @@ export class Tier1Engine {
 
   private scanText(extracted: ExtractedText): PatternMatch[] {
     const matches: PatternMatch[] = [];
-    const { text: normalizedText } = normalize(extracted.text);
+    let text = extracted.text;
+    if (text.length > this.maxInputLength) {
+      logger.debug(
+        { originalLength: text.length, limit: this.maxInputLength },
+        'Input text truncated to length limit before scanning',
+      );
+      text = text.slice(0, this.maxInputLength);
+    }
+    const { text: normalizedText } = normalize(text);
 
     // Run all patterns against normalized text
     this.runPatterns(normalizedText, matches);
 
     // Attempt to decode encodings and scan decoded variants
-    const decoded = decodeEncodings(extracted.text);
+    const decoded = decodeEncodings(text);
     for (const dec of decoded) {
       if (dec.encoding === 'none') continue;
       const decodedMatches: PatternMatch[] = [];
