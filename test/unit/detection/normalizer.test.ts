@@ -74,7 +74,7 @@ describe('zero-width character stripping', () => {
 
   it('should NOT strip combining diacritical marks', () => {
     // NFKC composes e + combining acute (U+0301) into e-with-acute (U+00E9)
-    const result = normalize('caf\u0301e');
+    const result = normalize('cafe\u0301');
     expect(result.text).toContain('\u00E9');
   });
 
