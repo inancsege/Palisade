@@ -1,22 +1,21 @@
 import type { VerdictAction, ThreatScore } from '../types/verdict.js';
 
-const BLOCK_THRESHOLD = 0.7;
-const WARN_THRESHOLD = 0.5;
-
 export function computeVerdict(
   score: ThreatScore,
   policyAction: VerdictAction,
+  blockThreshold = 0.7,
+  warnThreshold = 0.5,
 ): VerdictAction {
   if (score.matchCount === 0) return 'allow';
 
   if (policyAction === 'block') {
-    if (score.overall >= BLOCK_THRESHOLD) return 'block';
-    if (score.overall >= WARN_THRESHOLD) return 'warn';
+    if (score.overall >= blockThreshold) return 'block';
+    if (score.overall >= warnThreshold) return 'warn';
     return 'allow';
   }
 
   if (policyAction === 'warn') {
-    if (score.overall >= WARN_THRESHOLD) return 'warn';
+    if (score.overall >= warnThreshold) return 'warn';
     return 'allow';
   }
 

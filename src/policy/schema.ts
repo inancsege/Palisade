@@ -73,6 +73,9 @@ export const policySchema = {
           properties: {
             enabled: { type: 'boolean' },
             action: { type: 'string', enum: ['allow', 'warn', 'block'] },
+            block_threshold: { type: 'number', minimum: 0, maximum: 1 },
+            warn_threshold: { type: 'number', minimum: 0, maximum: 1 },
+            max_input_length: { type: 'integer', minimum: 100, maximum: 1000000 },
           },
           additionalProperties: false,
         },

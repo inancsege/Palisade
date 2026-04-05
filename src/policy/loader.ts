@@ -56,7 +56,17 @@ export function validateAndMerge(parsed: unknown, filePath?: string): PolicyConf
     );
   }
 
-  return mergePolicyWithDefaults(parsed as Partial<PolicyConfig>);
+  const merged = mergePolicyWithDefaults(parsed as Partial<PolicyConfig>);
+
+  // Cross-field validation: block_threshold must be > warn_threshold
+  if (merged.detection.tier1.block_threshold <= merged.detection.tier1.warn_threshold) {
+    throw new PolicyError(
+      `Invalid policy: detection.tier1.block_threshold (${merged.detection.tier1.block_threshold}) must be greater than warn_threshold (${merged.detection.tier1.warn_threshold})`,
+      filePath,
+    );
+  }
+
+  return merged;
 }
 
 export function mergePolicyWithDefaults(partial: Partial<PolicyConfig>): PolicyConfig {

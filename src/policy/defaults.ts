@@ -9,7 +9,7 @@ export const defaultPolicy: PolicyConfig = {
   },
   tools: {},
   detection: {
-    tier1: { enabled: true, action: 'block' },
+    tier1: { enabled: true, action: 'block', block_threshold: 0.7, warn_threshold: 0.5, max_input_length: 10000 },
     tier2: { enabled: false, threshold: 0.75, action: 'warn' },
     canary: { enabled: false, rotate_interval: 3600 },
   },

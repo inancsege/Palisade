@@ -29,6 +29,9 @@ export interface DetectionPolicyConfig {
   tier1: {
     enabled: boolean;
     action: VerdictAction;
+    block_threshold: number;
+    warn_threshold: number;
+    max_input_length: number;
   };
   tier2: {
     enabled: boolean;

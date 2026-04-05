@@ -32,7 +32,12 @@ export class DetectionEngine {
     }
 
     const threatScore = computeThreatScore(matches);
-    const action = computeVerdict(threatScore, this.policy.tier1.action);
+    const action = computeVerdict(
+      threatScore,
+      this.policy.tier1.action,
+      this.policy.tier1.block_threshold,
+      this.policy.tier1.warn_threshold,
+    );
 
     // Short-circuit: if Tier 1 already blocks, skip Tier 2
     // (Tier 2 integration point for v0.2)

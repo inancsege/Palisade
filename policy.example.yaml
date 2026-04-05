@@ -41,6 +41,11 @@ detection:
   tier1:
     enabled: true
     action: block
+    # Threat score thresholds (0.0 to 1.0). block_threshold must be > warn_threshold.
+    block_threshold: 0.7   # Score at or above this triggers block (default: 0.7)
+    warn_threshold: 0.5    # Score at or above this triggers warn (default: 0.5)
+    # Maximum characters per text field before truncation (default: 10000)
+    max_input_length: 10000
   tier2:
     enabled: true
     threshold: 0.75
