@@ -14,12 +14,12 @@ describe('weight propagation: scorer uses match.weight', () => {
 
   it('weight affects cumulative scoring with multiple matches', () => {
     const highWeightPair = computeThreatScore([
-      makeMatch({ weight: 1.0 }),
-      makeMatch({ weight: 1.0, patternId: 'p2' }),
+      makeMatch({ weight: 1.0, confidence: 0.4 }),
+      makeMatch({ weight: 1.0, confidence: 0.4, patternId: 'p2' }),
     ]);
     const lowWeightPair = computeThreatScore([
-      makeMatch({ weight: 0.6, patternId: 'p3' }),
-      makeMatch({ weight: 0.6, patternId: 'p4' }),
+      makeMatch({ weight: 0.6, confidence: 0.4, patternId: 'p3' }),
+      makeMatch({ weight: 0.6, confidence: 0.4, patternId: 'p4' }),
     ]);
     expect(highWeightPair.overall).toBeGreaterThan(lowWeightPair.overall);
   });

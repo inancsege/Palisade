@@ -37,7 +37,7 @@ export const delimiterEscapePatterns: PatternDefinition[] = [
     category: 'delimiter_escape',
     regex: '<!--\\s*(?:system|instruction|ignore|override)',
     flags: 'gi',
-    baseConfidence: 0.75,
+    baseConfidence: 0.78,
     weight: 0.8,
     description: 'Detects HTML comments containing injection instructions',
   },

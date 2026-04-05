@@ -17,13 +17,13 @@ describe('computeThreatScore', () => {
 
   it('should boost score for multi-category hits', () => {
     const singleCategory = computeThreatScore([
-      makeMatch({ confidence: 0.7, category: 'override_phrase' }),
-      makeMatch({ confidence: 0.7, category: 'override_phrase', patternId: 'p2' }),
+      makeMatch({ confidence: 0.4, weight: 0.5, category: 'override_phrase' }),
+      makeMatch({ confidence: 0.4, weight: 0.5, category: 'override_phrase', patternId: 'p2' }),
     ]);
 
     const multiCategory = computeThreatScore([
-      makeMatch({ confidence: 0.7, category: 'override_phrase' }),
-      makeMatch({ confidence: 0.7, category: 'role_marker', patternId: 'p2' }),
+      makeMatch({ confidence: 0.4, weight: 0.5, category: 'override_phrase' }),
+      makeMatch({ confidence: 0.4, weight: 0.5, category: 'role_marker', patternId: 'p2' }),
     ]);
 
     expect(multiCategory.overall).toBeGreaterThan(singleCategory.overall);

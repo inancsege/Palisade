@@ -23,12 +23,12 @@ export function computeThreatScore(matches: PatternMatch[]): ThreatScore {
     categoryScores[match.category] = Math.min(1.0, current + match.confidence * 0.5);
   }
 
-  // Weighted sum: each match contributes confidence * weight, normalized
+  // Weighted sum: each match contributes confidence * weight, accumulative (no averaging)
   let weightedSum = 0;
   for (const match of matches) {
     weightedSum += match.confidence * match.weight;
   }
-  weightedSum = Math.min(1.0, weightedSum / Math.max(matches.length, 1));
+  weightedSum = Math.min(1.0, weightedSum);
 
   // Take max single-match confidence into account (a strong single hit should dominate)
   const maxConfidence = Math.max(...matches.map((m) => m.confidence));
