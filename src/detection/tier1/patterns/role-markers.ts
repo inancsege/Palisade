@@ -25,7 +25,7 @@ export const roleMarkerPatterns: PatternDefinition[] = [
     id: 'role-marker:sys-tags',
     name: '<<SYS>> tag injection',
     category: 'role_marker',
-    regex: '<<\\s*/?\\s*SYS\\s*>>',
+    regex: '<<[\\s/]*SYS[\\s/]*>>',
     flags: 'gi',
     baseConfidence: 0.9,
     weight: 0.95,
