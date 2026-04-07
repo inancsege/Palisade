@@ -1,0 +1,16 @@
+// Programming code snippets with trigger-adjacent words in benign contexts
+// Each line is one independent sample
+
+const system = require('os').platform(); const role = 'admin'; if (user.role === 'system') { grant(access); }
+function ignoreCase(str: string): string { return str.toLowerCase(); } // Utility for case-insensitive comparison
+const user = { id: 1, role: 'editor', permissions: ['read', 'write'] }; validateRole(user.role);
+const instructions = document.getElementById('instructions'); instructions.innerHTML = renderMarkdown(content);
+let previous = null; for (const item of list) { if (previous && item.id === previous.id) continue; previous = item; }
+const answer = window.prompt('Enter your name:'); console.log('Hello, ' + answer);
+const dbHost = process.env.DATABASE_HOST || 'localhost'; const port = parseInt(process.env.PORT || '3000', 10);
+import { createServer } from 'node:http'; const server = createServer((req, res) => { res.writeHead(200); res.end('OK'); }); server.listen(8080);
+def get_system_info(): import platform; return { 'os': platform.system(), 'release': platform.release() }
+class SystemMonitor { constructor(private role: string) {} start() { console.log('Starting ' + this.role + ' monitor'); } }
+const config = { retryCount: 3, timeout: 5000, ignoreErrors: false }; applyConfig(config);
+async function fetchUserRole(userId: number): Promise<string> { const row = await db.query('SELECT role FROM users WHERE id = ?', [userId]); return row.role; }
+const previousState = store.getState(); dispatch(action); const nextState = store.getState(); if (previousState !== nextState) { notify(); }

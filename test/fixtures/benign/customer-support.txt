@@ -1,0 +1,13 @@
+// Customer support conversation samples with trigger-adjacent words in benign contexts
+// Each line is one independent sample
+
+I need help with my billing portal. Can you assist me with the payment page? My previous invoice shows an incorrect amount.
+How do I reset my password? I followed the instructions on the help page but the login screen keeps showing an error message.
+Can you explain the different user roles in your platform? I need to assign editor permissions to my team members.
+The output from the report generator is not matching our previous results. Can you help me troubleshoot the data export feature?
+I would like to stop receiving promotional emails and only receive important notifications. Where can I update my notification preferences?
+Your documentation mentions a command for testing the API, but I am getting a 403 error. Can you check my access permissions?
+I am trying to understand the error message from the server response. The encoded payload in the webhook does not match the expected format.
+Our previous support agent mentioned there would be an update to the admin dashboard. Has the new role management feature been released?
+The file upload page seems to be down. I have been trying to check the status page but it just shows a loading spinner.
+Can you walk me through the setup instructions again? I need to configure the environment for our production deployment.

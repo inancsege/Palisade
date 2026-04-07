@@ -1,0 +1,13 @@
+// Prompt engineering and LLM usage content with trigger-adjacent words in benign contexts
+// Each line is one independent sample
+
+When writing prompts for language models, structure your instructions clearly and provide specific examples to guide the model toward the desired output format.
+Prompt engineering best practices include using delimiters to separate instructions from content, providing few-shot examples, and specifying the desired output format explicitly.
+The initial message in the API call sets the model behavior and persona. Well-crafted opening messages can significantly improve response quality and consistency.
+Chain-of-thought prompting instructs the model to show its reasoning step by step. This technique often produces more accurate results for complex analytical tasks.
+Temperature and top-p are the primary sampling parameters that control output randomness. Lower temperature values produce more deterministic and focused responses.
+Retrieval-augmented generation combines a language model with a document retrieval pipeline. The retrieved context is prepended to the user query before sending to the model.
+Evaluating prompt effectiveness requires a systematic approach: define metrics, create a test dataset, run the prompt against multiple inputs, and analyze the output quality.
+Role-playing prompts instruct the model to adopt a specific persona. For example, asking the model to respond as a helpful coding tutor or a creative writing coach.
+Managing conversation context in multi-turn dialogues requires careful attention to token limits. Earlier messages consume context window space, so summarization strategies can help.
+The distinction between user messages and model messages is important for maintaining conversational coherence. Each role has different expectations in the training data.

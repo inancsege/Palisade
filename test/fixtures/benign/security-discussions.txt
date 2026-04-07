@@ -1,0 +1,12 @@
+// Security research content about prompt injection attacks -- indirect phrasing only
+// Each line is one independent sample
+
+Prompt injection is a class of attack where adversarial content is embedded in user input to manipulate language model behavior. Researchers have identified several categories including role marker injection and override phrase attacks.
+The OWASP Top 10 for LLMs lists prompt injection as the number one risk. Organizations deploying LLM applications should implement input validation, output filtering, and monitoring.
+Red teaming exercises for AI systems often involve testing various injection techniques to evaluate model robustness. Teams should document their findings and track which attack vectors succeed.
+Defense strategies against prompt injection include pattern matching, ML classifiers, canary tokens, and input sandboxing. Multi-layered approaches tend to be more effective than single-technique defenses.
+Research demonstrated that delimiter-based defenses can be bypassed using encoding techniques. This highlights the need for normalization before pattern matching in detection pipelines.
+Security auditors recommend testing LLM applications with both known attack payloads and novel variations. Automated scanning tools can check for common vulnerability patterns in prompt templates.
+The cost of false positives in injection detection is significant: legitimate users get blocked, trust erodes, and support tickets increase. Balancing detection sensitivity with usability is a core challenge.
+Organizations should maintain a corpus of known attack patterns and update their detection rules regularly. Threat intelligence feeds can help identify emerging injection techniques before they are exploited.
+Role-based access control and output filtering are complementary defenses that reduce the blast radius of successful injection attempts. Neither alone is sufficient for robust LLM security.

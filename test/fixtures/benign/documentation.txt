@@ -1,0 +1,13 @@
+// Technical documentation excerpts with trigger-adjacent words in benign contexts
+// Each line is one independent sample
+
+Follow these instructions to install the package: run npm install palisade, then configure your environment variables in a local .env file.
+The health endpoint returns server status. Call GET /api/health to check if all services are operational and the database connection is active.
+User roles determine access levels. Available roles are admin, editor, and viewer. Assign roles through the dashboard settings page.
+This version includes breaking changes from the previous release. See the migration guide for detailed steps on updating your configuration files.
+This library provides utilities for prompt template management. Templates support variable interpolation and can be loaded from external files.
+Add patterns to your .gitignore file to exclude build artifacts from version control. Common entries include node_modules/, dist/, and .env files.
+If the server fails to start, check that all environment variables are configured correctly. Run the diagnostic command to view current settings.
+The decodeURI() function accepts a URI-encoded string and returns the original UTF-8 content. It throws URIError if the input contains malformed percent sequences.
+Configuration files support multiple environments: development, staging, and production. Each environment can override default values using a dedicated config block.
+The logging subsystem writes structured JSON entries to the configured output. Set the level to debug during development and info or warn in production.
