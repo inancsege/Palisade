@@ -6,6 +6,8 @@ export interface MockUpstreamOptions {
   latencyMs?: number;
   streaming?: boolean;
   errorOnConnect?: boolean;
+  streamChunks?: Array<{ data: string; delayMs?: number }>;
+  abortAfterChunks?: number;
 }
 
 const DEFAULT_RESPONSE = {
@@ -17,6 +19,10 @@ const DEFAULT_RESPONSE = {
   usage: { input_tokens: 10, output_tokens: 5 },
 };
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function createMockUpstream(options: MockUpstreamOptions = {}): Server {
   const {
     status = 200,
@@ -24,6 +30,8 @@ export function createMockUpstream(options: MockUpstreamOptions = {}): Server {
     latencyMs = 0,
     streaming = false,
     errorOnConnect = false,
+    streamChunks,
+    abortAfterChunks,
   } = options;
 
   return createServer((req, res) => {
@@ -35,16 +43,33 @@ export function createMockUpstream(options: MockUpstreamOptions = {}): Server {
     let reqBody = '';
     req.on('data', (chunk) => (reqBody += chunk));
     req.on('end', () => {
-      const respond = () => {
+      const respond = async () => {
         if (streaming) {
           res.writeHead(status, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
             Connection: 'keep-alive',
           });
-          res.write(`data: ${JSON.stringify(body)}\n\n`);
-          res.write('data: [DONE]\n\n');
-          res.end();
+
+          if (streamChunks) {
+            for (let i = 0; i < streamChunks.length; i++) {
+              if (abortAfterChunks !== undefined && i >= abortAfterChunks) {
+                res.destroy();
+                return;
+              }
+              const chunk = streamChunks[i];
+              if (chunk.delayMs) {
+                await delay(chunk.delayMs);
+              }
+              res.write(`data: ${chunk.data}\n\n`);
+            }
+            res.write('data: [DONE]\n\n');
+            res.end();
+          } else {
+            res.write(`data: ${JSON.stringify(body)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
         } else {
           res.writeHead(status, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(body));
@@ -52,9 +77,15 @@ export function createMockUpstream(options: MockUpstreamOptions = {}): Server {
       };
 
       if (latencyMs > 0) {
-        setTimeout(respond, latencyMs);
+        setTimeout(() => {
+          respond().catch(() => {
+            /* latency + async respond error ignored */
+          });
+        }, latencyMs);
       } else {
-        respond();
+        respond().catch(() => {
+          /* async respond error ignored */
+        });
       }
     });
   });
