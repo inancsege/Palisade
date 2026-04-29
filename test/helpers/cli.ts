@@ -23,10 +23,20 @@ export function stripAnsi(s: string): string {
 }
 
 /**
- * Monkey-patches process.stdout.write and process.stderr.write to capture
- * everything that goes through, including chalk-colorized output. Returns a
- * { readStdout, readStderr, restore } object. Callers MUST call restore() in
- * finally to avoid leaking patches into other tests.
+ * Captures CLI output by spying on console.log / console.error / console.warn.
+ * The CLI commands route everything through console.* (including chalk-colored
+ * strings, which are just plain-string returns from chalk that the console
+ * call writes verbatim), so this captures all behavior-relevant output.
+ *
+ * NOTE: process.stdout.write monkey-patching is unreliable under Vitest's
+ * stdout interceptor (the wrapping order means vitest sees writes before our
+ * patch installs), so we spy on console.* instead.
+ *
+ * Also wraps process.stdout.write / process.stderr.write as a defensive
+ * fallback for any code that bypasses console.* and writes directly.
+ *
+ * Returns a { readStdout, readStderr, restore } object. Callers MUST call
+ * restore() in finally to avoid leaking patches into other tests.
  */
 export function captureIo(): {
   readStdout: () => string;
@@ -35,8 +45,33 @@ export function captureIo(): {
 } {
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
-  const originalStdout = process.stdout.write.bind(process.stdout);
-  const originalStderr = process.stderr.write.bind(process.stderr);
+
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const originalInfo = console.info;
+
+  const formatArg = (a: unknown): string =>
+    typeof a === 'string' ? a : a === undefined ? 'undefined' : String(a);
+  const formatLine = (args: unknown[]): string => args.map(formatArg).join(' ') + '\n';
+
+  console.log = (...args: unknown[]): void => {
+    stdoutChunks.push(formatLine(args));
+  };
+  console.info = (...args: unknown[]): void => {
+    stdoutChunks.push(formatLine(args));
+  };
+  console.error = (...args: unknown[]): void => {
+    stderrChunks.push(formatLine(args));
+  };
+  console.warn = (...args: unknown[]): void => {
+    stderrChunks.push(formatLine(args));
+  };
+
+  // Defensive fallback: also wrap raw stdout/stderr.write in case any code path
+  // bypasses console.*. Restored in restore() below.
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
   // @ts-expect-error: signature compatibility
   process.stdout.write = (chunk: string | Uint8Array): boolean => {
     stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
@@ -47,12 +82,17 @@ export function captureIo(): {
     stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
     return true;
   };
+
   return {
     readStdout: () => stdoutChunks.join(''),
     readStderr: () => stderrChunks.join(''),
     restore: () => {
-      process.stdout.write = originalStdout;
-      process.stderr.write = originalStderr;
+      console.log = originalLog;
+      console.error = originalError;
+      console.warn = originalWarn;
+      console.info = originalInfo;
+      process.stdout.write = originalStdoutWrite;
+      process.stderr.write = originalStderrWrite;
     },
   };
 }
