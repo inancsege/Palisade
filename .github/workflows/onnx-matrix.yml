@@ -1,0 +1,55 @@
+name: ONNX cross-platform + tokenizer parity (FOUND-04/06)
+
+# FOUND-04: prove onnxruntime-node installs + runs one inference on Windows + macOS + Linux.
+# FOUND-06: prove Python AutoTokenizer == Node @huggingface/transformers token IDs over the C4 corpus.
+#
+# These ML packages are installed ad-hoc here ONLY (NOT added to package.json in Phase 1 — that
+# happens in Phase 2, which locks the EFFECTIVE resolved onnxruntime-node version this run prints).
+# fail-fast: false is MANDATORY — the E1 cut signal needs an independent pass/fail per OS.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'bench/ci/**'
+      - '.github/workflows/onnx-matrix.yml'
+
+jobs:
+  onnx-hello:
+    name: ONNX hello-world (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # match package.json engines.node >=20 (NOT the dev box's 24)
+      - name: Install ML packages (ad-hoc — not in package.json)
+        run: npm install --no-save onnxruntime-node@1.22.0 @huggingface/transformers@3.8.1
+      - name: ONNX hello-world (E1 cut signal)
+        run: node bench/ci/onnx-hello.mjs
+
+  tokenizer-parity:
+    name: Python vs Node tokenizer parity (FOUND-06)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Node ML packages
+        run: npm install --no-save @huggingface/transformers@3.8.1
+      - name: Install Python tokenizer deps
+        run: pip install "transformers[torch]" sentencepiece
+      - name: Python reference token IDs
+        run: python bench/ci/tokenizer-parity-ref.py bench/ci/.parity-ref.json
+      - name: Node token IDs
+        run: node bench/ci/tokenizer-parity-node.mjs bench/ci/.parity-node.json
+      - name: Assert identical token IDs (exits 1 on any mismatch)
+        run: node bench/ci/tokenizer-parity-assert.mjs bench/ci/.parity-ref.json bench/ci/.parity-node.json
