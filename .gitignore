@@ -10,6 +10,7 @@ coverage/
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+scratch/
 .planning/
 .claude/
 CLAUDE.md
