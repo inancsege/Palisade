@@ -13,7 +13,11 @@ import { pipeline } from '@huggingface/transformers';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
-const MODEL = 'protectai/deberta-v3-small-prompt-injection-v2';
+// NOTE: the small model is `gated: auto` (needs a one-click HF license acceptance). The base
+// model is NOT gated, so it downloads with just an HF_TOKEN — and proving the larger model loads
+// cross-platform is a STRONGER FOUND-04/E1 signal than the small one. The bake-off (FOUND-03)
+// compares both; the small model's gated terms must be accepted for that step.
+const MODEL = process.env.HELLO_MODEL || 'protectai/deberta-v3-base-prompt-injection-v2';
 // Pin to a verified HF commit for reproducible benchmarks (Phase 3). For this install/runtime
 // smoke a mutable revision is acceptable; override with MODEL_REVISION to pin.
 const REVISION = process.env.MODEL_REVISION || 'main';
