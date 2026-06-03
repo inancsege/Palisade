@@ -14,6 +14,12 @@ on:
       - 'bench/ci/**'
       - '.github/workflows/onnx-matrix.yml'
 
+# HF rate-limits anonymous model downloads from CI runner IPs (401). Add an HF_TOKEN repo
+# secret (Settings -> Secrets and variables -> Actions) to authenticate the deberta download.
+# Both @huggingface/transformers (Node) and transformers (Python) read HF_TOKEN automatically.
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
 jobs:
   onnx-hello:
     name: ONNX hello-world (${{ matrix.os }})
@@ -28,7 +34,10 @@ jobs:
         with:
           node-version: '20' # match package.json engines.node >=20 (NOT the dev box's 24)
       - name: Install ML packages (ad-hoc — not in package.json)
-        run: npm install --no-save onnxruntime-node@1.22.0 @huggingface/transformers@3.8.1
+        # Install transformers ONLY; it pins onnxruntime-node@1.21.0 as a nested dep (the version
+        # that actually drives inference — research Pitfall 3). Explicit 1.22.0 has a broken Linux
+        # postinstall (NuGet CUDA-provider fetch), so we do NOT install it top-level.
+        run: npm install --no-save @huggingface/transformers@3.8.1
       - name: ONNX hello-world (E1 cut signal)
         run: node bench/ci/onnx-hello.mjs
 
