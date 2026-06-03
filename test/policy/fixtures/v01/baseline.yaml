@@ -1,0 +1,5 @@
+# v0.1 backward-compat fixture — MINIMAL policy.
+# A v0.1 operator could ship nothing but the required `version`. This MUST still
+# validate and merge under the v0.2 schema (D2-11, D18). Adding a fixture to this
+# directory auto-extends the v01-regression suite (it globs *.yaml).
+version: "1"

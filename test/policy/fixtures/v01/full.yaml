@@ -1,0 +1,44 @@
+# v0.1 backward-compat fixture — every v0.1 section populated.
+# Notably `detection.tier2` uses the ORIGINAL v0.1 shape `{enabled, threshold, action}`
+# (no ambiguous_band / calibration / model_path — those are additive v0.2 fields with
+# defaults). This is the exact shape a v0.1 operator would have written; it MUST validate
+# under the v0.2 schema (D2-11, D18).
+version: "1"
+
+defaults:
+  network_egress: deny
+  filesystem: read_only
+  shell_exec: deny
+
+tools:
+  weather-lookup:
+    network_egress:
+      allow:
+        - "api.openweathermap.org"
+    filesystem: none
+    shell_exec: deny
+  code-runner:
+    network_egress: deny
+    filesystem:
+      read_write:
+        - "./workspace/sandbox/"
+    shell_exec:
+      allow:
+        - "python3"
+      deny:
+        - "curl"
+
+detection:
+  tier1:
+    enabled: true
+    action: block
+    block_threshold: 0.7
+    warn_threshold: 0.5
+    max_input_length: 10000
+  tier2:
+    enabled: false
+    threshold: 0.75
+    action: warn
+  canary:
+    enabled: false
+    rotate_interval: 3600

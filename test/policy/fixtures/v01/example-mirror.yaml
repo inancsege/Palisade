@@ -1,0 +1,56 @@
+# v0.1 backward-compat fixture — a mirror of the canonical v0.1 `policy.example.yaml`.
+# This is the policy we ship as the documented example; if a schema change ever stopped
+# it validating, the regression suite fails (D2-11, D18). Keep in sync with the root
+# policy.example.yaml shape. The v0.1 `detection.tier2: {enabled, threshold, action}`
+# shape is preserved additively by the v0.2 schema.
+version: "1"
+
+defaults:
+  network_egress: deny
+  filesystem: read_only
+  shell_exec: deny
+
+tools:
+  weather-lookup:
+    network_egress:
+      allow:
+        - "api.openweathermap.org"
+        - "api.weatherapi.com"
+    filesystem: none
+    shell_exec: deny
+
+  document-summarizer:
+    network_egress: deny
+    filesystem:
+      read_only:
+        - "./workspace/docs/"
+    shell_exec: deny
+
+  code-runner:
+    network_egress: deny
+    filesystem:
+      read_write:
+        - "./workspace/sandbox/"
+    shell_exec:
+      allow:
+        - "python3"
+        - "node"
+      deny:
+        - "curl"
+        - "wget"
+        - "nc"
+
+detection:
+  tier1:
+    enabled: true
+    action: block
+    block_threshold: 0.7
+    warn_threshold: 0.5
+    max_input_length: 10000
+  tier2:
+    enabled: true
+    threshold: 0.75
+    action: block
+  canary:
+    enabled: true
+    rotate_interval: 3600
