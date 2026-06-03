@@ -33,6 +33,9 @@ export class PalisadeProxy {
 
   async start(): Promise<void> {
     await this.db.initialize();
+    // D08 lifecycle: warm up the detection engine (Tier 2) BEFORE the server accepts traffic.
+    // No-op without a model (Slice A); real ONNX warmup slots in here in Slice B.
+    await this.engine.initialize();
     this.eventLogger = new EventLogger(this.db);
 
     this.server = createServer((req, res) => {
@@ -57,10 +60,12 @@ export class PalisadeProxy {
   }
 
   async stop(): Promise<void> {
+    if (this.eventLogger) {
+      this.eventLogger.close();
+    }
+    // Release the detection engine's (future) Tier 2 session. Safe pre-init / when never started.
+    await this.engine.close();
     return new Promise((resolve) => {
-      if (this.eventLogger) {
-        this.eventLogger.close();
-      }
       if (this.server) {
         this.server.close(() => {
           this.db.close();
@@ -143,6 +148,7 @@ export class PalisadeProxy {
               'X-Palisade-Verdict': 'block',
               'X-Palisade-Request-Id': requestId,
               'X-Palisade-Threat-Score': detectionResult.threatScore.overall.toFixed(4),
+              'X-Palisade-Tiers': detectionResult.tiersExecuted.join(','),
             });
             res.end(JSON.stringify(blocked));
             logger.warn(
@@ -223,6 +229,8 @@ export class PalisadeProxy {
       responseHeaders['x-palisade-request-id'] = requestId;
       responseHeaders['x-palisade-threat-score'] = detectionResult.threatScore.overall.toFixed(4);
       responseHeaders['x-palisade-latency-ms'] = detectionResult.latencyMs.toFixed(2);
+      // T2-08: additive header reporting which tiers ran ('1' or '1,2'). v0.1 headers unchanged.
+      responseHeaders['x-palisade-tiers'] = detectionResult.tiersExecuted.join(',');
     }
 
     // Handle streaming vs non-streaming response
