@@ -65,12 +65,54 @@ export class EventDatabase {
       }
 
       this.db.run(SCHEMA);
+      this.migrate();
     } catch (err) {
       throw new DatabaseError(
         `Failed to initialize database: ${(err as Error).message}`,
         err as Error,
       );
     }
+  }
+
+  /**
+   * Additive, idempotent v0.2 schema migration (D19). Ported from the FOUND-07-proven
+   * `scratch/sqljs-migration.mjs`: nullable `tier2_confidence`/`tier3_confidence` columns on
+   * `events`, a `meta` key/value table with `schema_version='2'`, and a counts-only
+   * `tier3_cost_ledger` (no prompt text — D16). All statements are forward-compatible: opening a
+   * v0.1 `.db` leaves every v0.1 audit query identical, and re-running on an already-migrated db is
+   * a no-op. sql.js `ALTER TABLE ... ADD COLUMN` throws if the column already exists (no
+   * `IF NOT EXISTS` for columns), so each ADD COLUMN is guarded by a `PRAGMA table_info(events)`
+   * presence check.
+   */
+  private migrate(): void {
+    const db = this.db;
+    if (!db) return;
+
+    const existingColumns = new Set<string>();
+    const info = db.exec('PRAGMA table_info(events)');
+    // exec returns [{ columns: [...], values: [[cid, name, type, ...], ...] }]; column name is index 1.
+    for (const row of info[0]?.values ?? []) {
+      existingColumns.add(row[1] as string);
+    }
+
+    if (!existingColumns.has('tier2_confidence')) {
+      db.run('ALTER TABLE events ADD COLUMN tier2_confidence REAL');
+    }
+    if (!existingColumns.has('tier3_confidence')) {
+      db.run('ALTER TABLE events ADD COLUMN tier3_confidence REAL');
+    }
+
+    db.run('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)');
+    db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2')");
+
+    db.run(`
+CREATE TABLE IF NOT EXISTS tier3_cost_ledger (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  window_start TEXT NOT NULL,
+  window_type  TEXT NOT NULL,
+  call_count   INTEGER NOT NULL DEFAULT 0,
+  cost_units   REAL NOT NULL DEFAULT 0.0
+)`);
   }
 
   getDb(): SqlJsDatabase {
