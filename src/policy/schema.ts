@@ -85,6 +85,22 @@ export const policySchema = {
             enabled: { type: 'boolean' },
             threshold: { type: 'number', minimum: 0, maximum: 1 },
             action: { type: 'string', enum: ['allow', 'warn', 'block'] },
+            model_path: { type: 'string' },
+            ambiguous_band: {
+              type: 'array',
+              items: { type: 'number', minimum: 0, maximum: 1 },
+              minItems: 2,
+              maxItems: 2,
+            },
+            calibration: {
+              type: 'object',
+              properties: {
+                temperature: { type: 'number', exclusiveMinimum: 0 },
+                bias: { type: 'number' },
+              },
+              additionalProperties: false,
+            },
+            max_input_chars: { type: 'integer', minimum: 1, maximum: 100000 },
           },
           additionalProperties: false,
         },

@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import {
   validatePolicy,
   mergePolicyWithDefaults,
   validateAndMerge,
+  loadPolicy,
 } from '../../../src/policy/loader.js';
 import { PolicyError } from '../../../src/utils/errors.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const EXAMPLE_POLICY_PATH = resolve(__dirname, '../../../policy.example.yaml');
 
 describe('tier2 policy schema (v0.2 extension)', () => {
   describe('backwards compatibility (v0.1 policies)', () => {
@@ -32,6 +38,16 @@ describe('tier2 policy schema (v0.2 extension)', () => {
         },
       });
       expect(errors).toHaveLength(0);
+    });
+
+    it('loads the shipped policy.example.yaml under the v0.2 schema', () => {
+      const policy = loadPolicy(EXAMPLE_POLICY_PATH);
+      // v0.1 example sets tier2.{enabled,threshold,action}; v0.2 defaults fill the rest.
+      expect(policy.detection.tier2.action).toBe('block');
+      expect(policy.detection.tier2.threshold).toBe(0.75);
+      expect(policy.detection.tier2.ambiguous_band).toEqual([0.3, 0.7]);
+      expect(policy.detection.tier2.calibration).toEqual({ temperature: 1.0, bias: 0 });
+      expect(policy.detection.tier2.max_input_chars).toBe(4000);
     });
 
     it('rejects an unknown key under tier2 (additionalProperties:false preserved)', () => {
@@ -100,12 +116,17 @@ describe('tier2 policy schema (v0.2 extension)', () => {
   });
 
   describe('cross-field ambiguous_band validation (post-merge)', () => {
-    it('accepts a monotonic band within T1 thresholds', () => {
+    it('accepts the default cascade band [0.3, 0.7] under default T1 thresholds', () => {
+      const result = validateAndMerge({ version: '1' });
+      expect(result.detection.tier2.ambiguous_band).toEqual([0.3, 0.7]);
+    });
+
+    it('accepts a monotonic band within the T1 cascade window', () => {
       const result = validateAndMerge({
         version: '1',
-        detection: { tier2: { ambiguous_band: [0.5, 0.7] } },
+        detection: { tier2: { ambiguous_band: [0.4, 0.7] } },
       });
-      expect(result.detection.tier2.ambiguous_band).toEqual([0.5, 0.7]);
+      expect(result.detection.tier2.ambiguous_band).toEqual([0.4, 0.7]);
     });
 
     it('throws PolicyError for a non-monotonic band (low >= high)', () => {
@@ -132,16 +153,6 @@ describe('tier2 policy schema (v0.2 extension)', () => {
       ).toThrow(/ambiguous_band/);
     });
 
-    it('throws PolicyError when band low is below tier1.warn_threshold', () => {
-      // default warn_threshold = 0.5; low 0.4 sits below the T1 warn floor
-      expect(() =>
-        validateAndMerge({
-          version: '1',
-          detection: { tier2: { ambiguous_band: [0.4, 0.7] } },
-        }),
-      ).toThrow(/ambiguous_band/);
-    });
-
     it('throws PolicyError when band high exceeds tier1.block_threshold', () => {
       // default block_threshold = 0.7; high 0.8 sits above the T1 block ceiling
       expect(() =>
@@ -152,8 +163,8 @@ describe('tier2 policy schema (v0.2 extension)', () => {
       ).toThrow(/ambiguous_band/);
     });
 
-    it('respects custom T1 thresholds when validating the band', () => {
-      // widen the T1 window so a [0.4, 0.85] band is legal
+    it('respects custom tier1.block_threshold when validating the band ceiling', () => {
+      // widen the T1 window so a [0.4, 0.85] band is legal (high <= block_threshold)
       const result = validateAndMerge({
         version: '1',
         detection: {
@@ -162,6 +173,19 @@ describe('tier2 policy schema (v0.2 extension)', () => {
         },
       });
       expect(result.detection.tier2.ambiguous_band).toEqual([0.4, 0.85]);
+    });
+
+    it('rejects a band whose high exceeds a lowered custom block_threshold', () => {
+      // lower block_threshold to 0.6 so the default-ish [0.3, 0.7] high (0.7) is now out of range
+      expect(() =>
+        validateAndMerge({
+          version: '1',
+          detection: {
+            tier1: { warn_threshold: 0.4, block_threshold: 0.6 },
+            tier2: { ambiguous_band: [0.3, 0.7] },
+          },
+        }),
+      ).toThrow(/ambiguous_band/);
     });
 
     it('includes the offending band values in the error message', () => {

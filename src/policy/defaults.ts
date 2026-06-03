@@ -10,7 +10,14 @@ export const defaultPolicy: PolicyConfig = {
   tools: {},
   detection: {
     tier1: { enabled: true, action: 'block', block_threshold: 0.7, warn_threshold: 0.5, max_input_length: 10000 },
-    tier2: { enabled: false, threshold: 0.75, action: 'warn' },
+    tier2: {
+      enabled: false,
+      threshold: 0.75,
+      action: 'warn',
+      ambiguous_band: [0.3, 0.7],
+      calibration: { temperature: 1.0, bias: 0 },
+      max_input_chars: 4000,
+    },
     canary: { enabled: false, rotate_interval: 3600 },
   },
 };

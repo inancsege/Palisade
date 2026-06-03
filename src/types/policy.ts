@@ -37,6 +37,10 @@ export interface DetectionPolicyConfig {
     enabled: boolean;
     threshold: number;
     action: VerdictAction;
+    model_path?: string;
+    ambiguous_band: [number, number];
+    calibration: { temperature: number; bias: number };
+    max_input_chars: number;
   };
   canary: {
     enabled: boolean;
