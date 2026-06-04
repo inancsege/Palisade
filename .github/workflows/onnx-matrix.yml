@@ -62,3 +62,16 @@ jobs:
         run: node bench/ci/tokenizer-parity-node.mjs bench/ci/.parity-node.json
       - name: Assert identical token IDs (exits 1 on any mismatch)
         run: node bench/ci/tokenizer-parity-assert.mjs bench/ci/.parity-ref.json bench/ci/.parity-node.json
+
+  bakeoff:
+    name: Tier 2 small-vs-base bake-off (FOUND-03)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install transformers (nested onnxruntime 1.21.0)
+        run: npm install --no-save @huggingface/transformers@3.8.1
+      - name: Run bake-off over the C4 corpus (paraphrase consistency + latency)
+        run: node bench/ci/bakeoff.mjs

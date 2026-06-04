@@ -95,7 +95,19 @@ async function main() {
     return;
   }
   const results = [];
-  for (const m of MODELS) results.push(await evalModel(m, corpus));
+  for (const m of MODELS) {
+    try {
+      results.push(await evalModel(m, corpus));
+    } catch (e) {
+      // A gated model (e.g. the small one) 403s until its HF license is accepted — skip it,
+      // don't fail the whole bake-off. The decision is made over whatever models are accessible.
+      console.log(`SKIP ${m.id}: ${e.message} (gated/inaccessible — accept its HF license to include it)`);
+    }
+  }
+  if (results.length === 0) {
+    console.error('bake-off FAILED: no candidate model was accessible (all gated/unaccepted?)');
+    process.exit(1);
+  }
 
   const passing = results.filter((r) => r.paraphrase_consistency >= SHIP_THRESHOLD);
   let decision;

@@ -7,7 +7,8 @@
 import { AutoTokenizer } from '@huggingface/transformers';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
-const MODEL = 'protectai/deberta-v3-small-prompt-injection-v2';
+// Non-gated base model (deberta-v3 small/base share the same tokenizer). Override via PARITY_MODEL.
+const MODEL = process.env.PARITY_MODEL || 'protectai/deberta-v3-base-prompt-injection-v2';
 const REVISION = process.env.MODEL_REVISION || 'main';
 const CORPUS_FILES = ['bench/corpus/attacks.jsonl', 'bench/corpus/benign.jsonl'];
 

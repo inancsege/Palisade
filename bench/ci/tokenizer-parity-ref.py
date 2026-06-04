@@ -19,7 +19,10 @@ import json
 import os
 import sys
 
-MODEL = "protectai/deberta-v3-small-prompt-injection-v2"
+# Use the non-gated base model (deberta-v3 small/base share the same SentencePiece tokenizer,
+# so parity here proves parity for the family). Override via PARITY_MODEL.
+import os as _os
+MODEL = _os.environ.get("PARITY_MODEL", "protectai/deberta-v3-base-prompt-injection-v2")
 CORPUS_FILES = ["bench/corpus/attacks.jsonl", "bench/corpus/benign.jsonl"]
 
 
