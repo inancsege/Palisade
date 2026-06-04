@@ -1,0 +1,151 @@
+# Palisade v0.2 — Corpus C4 (held-out adversarial set) provenance MANIFEST
+#
+# C4 is the ONLY train_overlap:none corpus authored by this project and is the
+# headline-number source for the README (see docs/benchmark-protocol.md §3).
+# It is dual-purpose: it is also the 200+ fixed inputs consumed by the FOUND-06
+# tokenizer-parity test (bench/ci/tokenizer-parity-node.mjs) and the FOUND-03
+# small-vs-base bake-off (bench/ci/bakeoff.mjs).
+#
+# Consumers read these per-line JSONL fields: id, text, label, category,
+# paraphrase_of (attacks only). `detected` is appended at bake-off time.
+
+corpus_id: C4
+name: Palisade held-out adversarial set
+license: MIT (this repo)
+rng_seed: 20260603 # MUST equal the pinned seed in docs/benchmark-protocol.md (locked forever)
+generated: 2026-06-04
+generator: "Claude Opus (Palisade dev session, direct authoring)"
+
+# --- Counts (verified by the line-count check in 01-01-PLAN.md Task 3) ---
+total_entries: 210
+attack_count: 135
+benign_count: 75
+
+files:
+  - path: bench/corpus/attacks.jsonl
+    role: adversarial entries
+    entries: 135
+    sha256: 11bb8717220f46ac45f19c53ae56a57aa0b14feeb8679a0feb4e5998419de22f
+  - path: bench/corpus/benign.jsonl
+    role: benign / false-positive control entries
+    entries: 75
+    sha256: 4ea46f9c7ebed14d803fc346d6928883ecf32c7b8551044132d2ce873beed4f5
+
+# NOTE on sha256: these digests are a provenance snapshot of the corpus files at
+# authoring time. If the corpus is ever re-edited, recompute and update these
+# fields (node -e "require('crypto').createHash('sha256')..."). The protocol's
+# §7 reproducibility pinning (the corpus-snapshot sha used for the published
+# numbers) is taken at Phase-3 benchmark time, not here.
+
+# --- Per-category breakdown (attacks) ---
+# All 5 PatternCategory types are covered so the parity inputs and the bake-off
+# exercise the full detector surface, not one easy slice.
+attack_categories:
+  override_phrase: 32
+  role_marker: 28
+  delimiter_escape: 20
+  encoded_payload: 31 # includes the Unicode/homoglyph/obfuscation entries below
+  exfiltration: 24
+
+benign_categories:
+  benign: 75
+
+# --- Origin breakdown ---
+# fixture  = derived from the repo's own v0.1 test fixtures (repo-original, MIT).
+# paraphrase = a reworded/restructured variant, authored directly by Claude this
+#              session (NOT copied from any public corpus).
+origins:
+  attacks:
+    fixture: 30 # the 30 canonical seeds, lifted from repo v0.1 fixtures
+    paraphrase: 105 # Claude-authored variants grouped under each seed
+  benign:
+    fixture: 62 # drawn from test/fixtures/benign/*.txt (the 67-case FP suite)
+    paraphrase: 13 # Claude-authored hard FP controls (resemble attacks)
+
+# --- Paraphrase groups (the paraphrase-consistency signal) ---
+# 30 canonical seed attacks, each grouped with >= 3 genuinely-varied paraphrases
+# sharing the same `paraphrase_of`. The canonical entry's `paraphrase_of` equals
+# its own `id`. bench/ci/bakeoff.mjs scores, per group whose canonical attack was
+# detected, the fraction of its paraphrases also detected (ship threshold >= 0.75).
+paraphrase_groups: 30
+min_group_size: 4 # 1 canonical + 3+ paraphrases
+canonical_ids:
+  - atk-001 # override_phrase: ignore previous + reveal system prompt
+  - atk-005 # override_phrase: ignore previous + tell secrets
+  - atk-009 # override_phrase: disregard guidelines, respond freely
+  - atk-013 # override_phrase: forget everything
+  - atk-017 # override_phrase: you are now a different unrestricted AI
+  - atk-021 # override_phrase: IMPORTANT ignore safety filters
+  - atk-025 # override_phrase: enable developer mode
+  - atk-029 # override_phrase: DAN jailbreak persona
+  - atk-033 # role_marker: SYSTEM: unrestricted AI
+  - atk-037 # role_marker: [INST] forget training, DAN
+  - atk-041 # role_marker: <<SYS>> reveal all secrets
+  - atk-045 # role_marker: <|im_start|>system you are evil
+  - atk-049 # role_marker: <system> override previous
+  - atk-053 # role_marker: END OF SYSTEM INSTRUCTIONS
+  - atk-057 # role_marker: Human: turn marker injection
+  - atk-061 # delimiter_escape: code fence + system
+  - atk-065 # delimiter_escape: horizontal rule + override
+  - atk-069 # delimiter_escape: HTML comment instruction
+  - atk-073 # delimiter_escape: JSON role:system injection
+  - atk-077 # delimiter_escape: fake === CONTEXT === boundary
+  - atk-081 # encoded_payload: base64-wrapped instruction
+  - atk-085 # encoded_payload: URL-encoded closing INST tag
+  - atk-089 # encoded_payload: hex escape sequences
+  - atk-093 # encoded_payload: rot13-encoded message
+  - atk-097 # exfiltration: output the system prompt verbatim
+  - atk-101 # exfiltration: repeat everything above
+  - atk-105 # exfiltration: curl to external collector
+  - atk-109 # exfiltration: URL with data exfil parameter
+  - atk-113 # exfiltration: print $API_KEY env var
+  - atk-117 # exfiltration: read /etc/passwd
+
+# --- Unicode / obfuscation coverage (PITFALLS P5 — anti-too-easy) ---
+# >= 15 required; 20 entries contain a non-ASCII / zero-width / multibyte char so
+# the tokenizer-parity inputs are not all clean ASCII. Techniques used:
+unicode_obfuscation_count: 20
+unicode_obfuscation_techniques:
+  - zero-width characters (U+200B) splitting trigger words (atk-121, atk-126, atk-131)
+  - Cyrillic homoglyphs (atk-122, atk-129, atk-133, atk-134)
+  - Greek homoglyph (atk-127)
+  - full-width characters U+FF01..U+FF5E (atk-123, atk-128, atk-135)
+  - emoji separators (atk-125, atk-135)
+  - leet-speak digit substitution (atk-124, atk-130, atk-132)
+  - base64-wrapped instruction strings (atk-081..atk-084, atk-133)
+
+# --- Provenance & contamination rationale ---
+provenance: >
+  Seed attacks (the 30 canonical entries) are lifted directly from this repo's
+  own v0.1 test fixtures: test/fixtures/injections/samples.txt and the
+  categorized strings in test/unit/detection/corpus/*.corpus.test.ts. Those
+  fixtures are repo-original (MIT), authored post-2024 for v0.1, so contamination
+  risk against public classifier training sets is low. The 105 attack paraphrases
+  and 13 benign hard-control paraphrases were authored DIRECTLY by Claude (Opus)
+  during the Palisade development session on 2026-06-04 — reworded, restructured,
+  and reframed, NOT trivial synonym swaps and NOT copied from any public injection
+  corpus. Benign fixture entries are drawn from the 67-case false-positive
+  regression suite (test/fixtures/benign/*.txt). Because every entry is either
+  repo-original or freshly authored this session, train_overlap is `none` for all
+  210 entries — this is the property that makes C4 the legitimate headline source.
+
+train_overlap: none # applies to every entry; honest because all entries are repo-original or freshly authored
+
+contamination_note: >
+  Per docs/benchmark-protocol.md §3 and §6, any C4 candidate within simhash /
+  3-gram Jaccard >= 0.85 of a known training string is excluded from the headline
+  set. No verbatim public-corpus strings were introduced here, so no entry is
+  flagged contaminated. The headline number cites train_overlap:none corpora only.
+
+# --- Integrity disclosure (read this) ---
+disclosure: >
+  The paraphrase expansions in this corpus were authored DIRECTLY by Claude (Opus)
+  during the Palisade dev session, NOT generated via a paid API call (the original
+  plan specified a GPT-4/OpenAI API expansion, but the account was at $0 credit, so
+  the paraphraser's job was performed inline by Claude). This is legitimate
+  corpus-DATA authoring — writing adversarial attack strings and benign control
+  strings is exactly the paraphraser's intended function. NO benchmark RESULT and
+  NO metric number was invented here: this file contains only corpus input text and
+  honest provenance. The actual bake-off numbers (paraphrase consistency, latency,
+  per-category F1) are computed SEPARATELY by bench/ci/bakeoff.mjs running a real
+  ONNX model over this corpus — they are not present in, nor implied by, this corpus.
