@@ -6,7 +6,9 @@
 > is **finalized** in Phase 5 (DOC-11) and shipped next to the model artifact as
 > `dist/tier2/MODEL_ATTRIBUTION.md`.
 
-**Status:** Registered 2026-06-03. Facts below are verified from the official ProtectAI model
+**Status:** Registered 2026-06-03; **chosen model decided 2026-06-06** by the FOUND-03 bake-off
+(`docs/tier2-bakeoff.md`): **`protectai/deberta-v3-base-prompt-injection-v2`** (paraphrase
+consistency 0.978 ≥ 0.75 ship gate). Facts below are verified from the official ProtectAI model
 cards this session; the complete training-dataset enumeration is mirrored from the model card and
 finalized in Phase 5 (no dataset names are invented here).
 
@@ -14,10 +16,10 @@ finalized in Phase 5 (no dataset names are invented here).
 
 ## Candidate Models
 
-| Model | License | Base | Size | Reported F1 | INJECTION label |
-|-------|---------|------|------|-------------|-----------------|
-| `protectai/deberta-v3-small-prompt-injection-v2` | **Apache-2.0** | `microsoft/deberta-v3-small` | ~280 MB | 94.62 | label `1` |
-| `protectai/deberta-v3-base-prompt-injection-v2` | **Apache-2.0** | `microsoft/deberta-v3-base` | ~700 MB | 95.49 | label `1` |
+| Model | License | Base | Size | Reported F1 | INJECTION label | Bake-off (FOUND-03) |
+|-------|---------|------|------|-------------|-----------------|---------------------|
+| `protectai/deberta-v3-small-prompt-injection-v2` | **Apache-2.0** | `microsoft/deberta-v3-small` | ~280 MB | 94.62 | label `1` | not evaluated (HF-gated) |
+| `protectai/deberta-v3-base-prompt-injection-v2` ✅ **CHOSEN** | **Apache-2.0** | `microsoft/deberta-v3-base` | ~700 MB | 95.49 | label `1` | bake-off winner (0.978) |
 
 Both ship an ONNX export under `onnx/` in their HF repo (required for `onnxruntime-node`), are
 pinned by HF commit hash + sha256 (Phase 1/2), and carry the same documented limitations: **English-only**
