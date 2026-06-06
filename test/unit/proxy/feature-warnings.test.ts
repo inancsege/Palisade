@@ -25,16 +25,13 @@ describe('checkUnimplementedFeatures', () => {
     expect(mockLog.warn).not.toHaveBeenCalled();
   });
 
-  it('should warn when tier2.enabled is true', () => {
+  it('should NOT warn when tier2.enabled is true (Tier 2 is implemented in v0.2)', () => {
+    // Tier 2 ML detection ships in v0.2 (Phase 2). Enabling it without an installed model is
+    // handled by the `tier2_model_missing` fast-fail in serve, not by a "not implemented" warning.
     const mockLog = { warn: vi.fn() };
     const warnings = checkUnimplementedFeatures(policyWith({ tier2Enabled: true }), mockLog);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('tier2');
-    expect(mockLog.warn).toHaveBeenCalledOnce();
-    expect(mockLog.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ feature: 'tier2' }),
-      expect.stringContaining('tier2'),
-    );
+    expect(warnings).toEqual([]);
+    expect(mockLog.warn).not.toHaveBeenCalled();
   });
 
   it('should warn when canary.enabled is true', () => {
@@ -49,13 +46,18 @@ describe('checkUnimplementedFeatures', () => {
     );
   });
 
-  it('should return 2 warnings when both are enabled', () => {
+  it('should warn only for canary when both tier2 and canary are enabled (tier2 is implemented)', () => {
     const mockLog = { warn: vi.fn() };
     const warnings = checkUnimplementedFeatures(
       policyWith({ tier2Enabled: true, canaryEnabled: true }),
       mockLog,
     );
-    expect(warnings).toHaveLength(2);
-    expect(mockLog.warn).toHaveBeenCalledTimes(2);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('canary');
+    expect(mockLog.warn).toHaveBeenCalledOnce();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ feature: 'canary' }),
+      expect.stringContaining('canary'),
+    );
   });
 });

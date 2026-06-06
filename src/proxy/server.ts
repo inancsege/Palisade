@@ -255,11 +255,10 @@ export function checkUnimplementedFeatures(
 ): string[] {
   const warnings: string[] = [];
 
-  if (policy.detection.tier2.enabled) {
-    const msg = 'tier2.enabled is set but Tier 2 ML detection is not yet implemented (planned for v2)';
-    log.warn({ feature: 'tier2' }, msg);
-    warnings.push(msg);
-  }
+  // Tier 2 ML detection is implemented as of v0.2 (Phase 2). When enabled but the model is not
+  // installed, Tier2Engine.initialize() fast-fails with `tier2_model_missing` (see serve.ts) — that
+  // is the correct operator signal, NOT a "not implemented" warning. So tier2 is intentionally not
+  // listed here. Canary token detection remains unimplemented.
 
   if (policy.detection.canary.enabled) {
     const msg = 'canary.enabled is set but canary token detection is not yet implemented (planned for v2)';
