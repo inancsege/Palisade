@@ -1,37 +1,63 @@
 /**
- * Slice-B PLACEHOLDER — Tier 2 stride-384 chunker (T2-04, D06).
+ * Tier 2 stride-384 chunker (T2-04, D06).
  *
- * This is a thin, dependency-free typed stub. The real overlapping-window chunker is gated on the
- * Phase 1 bake-off model and lands in Slice B alongside `palisade tier2 install` (T2-09) and the
- * 3-shape warmup (T2-02). It imports NO ML package and makes NO `package.json` change.
+ * Splits a long token sequence into overlapping 512-token windows with a stride of 384
+ * (128-token overlap = max - stride) so a late-positioned injection is never truncated away
+ * (Pitfall 3). A short input that already fits in one window passes straight through. The document
+ * score is the MAX over per-window scores (D06): the threat model is "is there an injection
+ * ANYWHERE in this text?", so a single high-scoring window is a positive regardless of how many
+ * benign windows surround it (mean would dilute a localized injection below threshold).
  *
- * Contract the real implementation must honor (D06): split long token sequences into overlapping
- * windows with a stride of 384, capped at ~512 tokens / ~4000 chars per window, and the document
- * score is the MAX over windows. The single-window passthrough below is the trivial short-input
- * case that the real chunker must reduce to when the input already fits in one window.
+ * Pure array math — this file imports NO ML package. The window-id -> text decode (`decodeWindow`)
+ * lives in `tokenizer.ts`, keeping the chunker model-independent and fully unit-testable (D20).
  */
 
-/** Stride/window options for the Slice-B chunker. */
+/** Stride/window options for the chunker. */
 export interface ChunkOptions {
-  /** Overlap stride between consecutive windows (D06 default in Slice B: 384). */
+  /** Overlap stride between consecutive window starts (D06 default: 384). */
   stride?: number;
-  /** Maximum tokens per window (D06 cap in Slice B: ~512). */
+  /** Maximum tokens per window (D06 cap: 512). */
   max?: number;
 }
+
+/** Default tokens per window (the model's max sequence length). */
+const DEFAULT_MAX = 512;
+/** Default stride between window starts; 512 - 384 = 128 tokens of overlap. */
+const DEFAULT_STRIDE = 384;
 
 /**
  * Split `tokens` into overlapping windows for Tier 2 inference.
  *
- * Slice-A stub: single-window passthrough — returns `[tokens]` when non-empty, `[]` otherwise.
- * The stride-384 overlapping-window logic replaces the body in Slice B.
+ * - empty input -> `[]`
+ * - `tokens.length <= max` -> `[tokens]` (single-window passthrough)
+ * - otherwise -> stride-`stride` windows of up to `max` tokens, the last covering the tail.
  *
  * @param tokens token ids (from `tokenize`).
- * @param opts   stride/cap options (ignored by the stub).
- * @returns windows of token ids — one passthrough window in Slice A.
+ * @param opts   stride/cap overrides (defaults: stride 384, max 512).
+ * @returns windows of token ids.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function chunk(tokens: number[], opts?: ChunkOptions): number[][] {
-  // TODO(slice-b): stride-384 overlapping windows, cap ~512 tokens / 4000 chars, score = max over
-  // windows (D06, T2-04).
-  return tokens.length ? [tokens] : [];
+  const max = opts?.max ?? DEFAULT_MAX;
+  const stride = opts?.stride ?? DEFAULT_STRIDE;
+
+  if (tokens.length === 0) return [];
+  if (tokens.length <= max) return [tokens];
+
+  const windows: number[][] = [];
+  for (let start = 0; start < tokens.length; start += stride) {
+    windows.push(tokens.slice(start, start + max));
+    // The last window reaches the end of the sequence — stop so we don't emit empty tail windows.
+    if (start + max >= tokens.length) break;
+  }
+  return windows;
+}
+
+/**
+ * Aggregate per-window scores into the document score (D06: MAX over windows).
+ *
+ * @param scores per-window injection scores.
+ * @returns the maximum score, or 0 for an empty array.
+ */
+export function maxOverWindows(scores: number[]): number {
+  return scores.reduce((acc, s) => Math.max(acc, s), 0);
 }
