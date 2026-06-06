@@ -102,6 +102,9 @@ describe('Tier2Engine stub', () => {
       // A subclass that forces the (stubbed) inference body to throw, proving scan()
       // catches it and degrades rather than rejecting.
       class FailingTier2Engine extends Tier2Engine {
+        protected isModelInstalled(): boolean {
+          return true; // injected fake classifier; never install a real model (T2-09 seam).
+        }
         protected async loadClassifier(): Promise<never> {
           return fakeClassifier() as never;
         }
@@ -142,6 +145,9 @@ describe('Tier2Engine stub', () => {
 
       // A subclass whose inference is slow (so scans overlap) and records concurrency.
       class SlowTier2Engine extends Tier2Engine {
+        protected isModelInstalled(): boolean {
+          return true; // injected fake classifier; never install a real model (T2-09 seam).
+        }
         protected async loadClassifier(): Promise<never> {
           return fakeClassifier() as never;
         }
@@ -181,6 +187,9 @@ describe('Tier2Engine stub', () => {
     it('releases inflight slots after a scan completes so later scans can run', async () => {
       const inflightCap = 2;
       class SlowTier2Engine extends Tier2Engine {
+        protected isModelInstalled(): boolean {
+          return true; // injected fake classifier; never install a real model (T2-09 seam).
+        }
         protected async loadClassifier(): Promise<never> {
           return fakeClassifier() as never;
         }

@@ -74,6 +74,12 @@ class FakeLoadingTier2Engine extends Tier2Engine {
   loadCount = 0;
   fake = makeFakeClassifier();
 
+  // Report the model as installed (T2-09): these tests inject a FAKE classifier and never install a
+  // real model, so override the install-presence seam so the initialize() fast-fail does not fire.
+  protected isModelInstalled(): boolean {
+    return true;
+  }
+
   protected async loadClassifier(modelDir: string): Promise<never> {
     this.loadCount += 1;
     this.lastModelDir = modelDir;

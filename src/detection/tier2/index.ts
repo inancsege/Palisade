@@ -2,9 +2,11 @@ import { pipeline, env, type TextClassificationPipeline } from '@huggingface/tra
 import type { DetectionPolicyConfig } from '../../types/policy.js';
 import type { Tier2Result } from '../../types/verdict.js';
 import { logger } from '../../utils/logger.js';
+import { DetectionError } from '../../utils/errors.js';
 import { calibrate } from './calibrate.js';
 import { chunk } from './chunker.js';
 import { tokenize, decodeWindow, loadTokenizer } from './tokenizer.js';
+import { isInstalled, MODEL_SHA } from './model-cache.js';
 
 /**
  * The slice of policy config the Tier 2 engine needs. Mirrors `DetectionPolicyConfig['tier2']`
@@ -84,6 +86,18 @@ export class Tier2Engine {
     if (!this.config.enabled || !this.hasModel()) {
       this.initialized = true;
       return;
+    }
+
+    // Model-missing fast-fail (T2-09, RESEARCH Pattern 7): Tier 2 is enabled AND a model is
+    // configured (hasModel() guards the benign enabled-but-no-model_path no-op above), but the
+    // pinned model is not installed in the cache. This is a PURE `existsSync` check — no network,
+    // well under 2s — so `palisade serve` exits fast with a remediation rather than hanging or
+    // silently fetching (threats T-02-07-Ieg / T-02-07-D). Runs BEFORE any tokenizer/pipeline load.
+    if (!this.isModelInstalled()) {
+      throw new DetectionError(
+        'Tier 2 is enabled but no model is installed. Run: palisade tier2 install',
+        'tier2_model_missing',
+      );
     }
 
     // Forbid any request-time hub fetch; load strictly from the local cache dir (RESEARCH Pattern 7).
@@ -206,6 +220,18 @@ export class Tier2Engine {
   /** True when a model is configured. Until Slice B installs one, this is false. */
   private hasModel(): boolean {
     return typeof this.config.model_path === 'string' && this.config.model_path.length > 0;
+  }
+
+  /**
+   * Whether the pinned Tier 2 model is actually installed in the local cache (T2-09). PURE,
+   * network-free `existsSync` check (delegates to `model-cache.isInstalled(MODEL_SHA)`), so the
+   * fast-fail in `initialize()` exits well under 2s with no hub fetch. Declared `protected` so the
+   * subclass-injection unit tests (which inject a fake classifier via `loadClassifier` and never
+   * install a real model) can report "installed" without a 700MB download — keeping the
+   * model-touching seam unit-testable (D20).
+   */
+  protected isModelInstalled(): boolean {
+    return isInstalled(MODEL_SHA);
   }
 
   /**
