@@ -1,6 +1,10 @@
+import type { TextClassificationPipeline } from '@huggingface/transformers';
 import type { DetectionPolicyConfig } from '../../types/policy.js';
 import type { Tier2Result } from '../../types/verdict.js';
 import { logger } from '../../utils/logger.js';
+import { calibrate } from './calibrate.js';
+import { chunk } from './chunker.js';
+import { tokenize, decodeWindow } from './tokenizer.js';
 
 /**
  * The slice of policy config the Tier 2 engine needs. Mirrors `DetectionPolicyConfig['tier2']`
@@ -24,6 +28,11 @@ interface InferenceOutput {
  */
 const DEFAULT_INFLIGHT_CAP = 16;
 
+/** Overlap stride between consecutive 512-token windows (D06: 384 → 128-token overlap). */
+const WINDOW_STRIDE = 384;
+/** Maximum tokens per inference window (the model's max sequence length, D06). */
+const WINDOW_MAX = 512;
+
 /**
  * Tier 2 (local ML classifier) engine — STUB (Slice A).
  *
@@ -39,6 +48,16 @@ export class Tier2Engine {
   private inflightCap: number;
   private inflight = 0;
   private initialized = false;
+
+  /**
+   * The singleton ONNX text-classification pipeline, loaded ONCE in `initialize()` and reused for
+   * every scan (one session per process — success criterion 7; null until loaded / after close).
+   *
+   * Declared `protected` (NOT private) so the warmup/inference subclass tests can inject and inspect
+   * a fake classifier without an `as any` cast (the existing `FailingTier2Engine`/`SlowTier2Engine`
+   * pattern). Populated in `initialize()` (Task 2).
+   */
+  protected classifier: TextClassificationPipeline | null = null;
 
   constructor(config: Tier2Config, inflightCap: number = DEFAULT_INFLIGHT_CAP) {
     this.config = config;
@@ -104,15 +123,37 @@ export class Tier2Engine {
   }
 
   /**
-   * The stubbed inference body. Slice B replaces this with tokenize → chunk → ONNX run →
-   * calibrate. In Slice A there is no model so this is unreachable from `scan()` (the no-model
-   * guard returns earlier); it exists so subclasses/tests can inject behavior and so the real
-   * implementation has a single seam to fill.
+   * Real inference body (T2-01). Composes the model-independent adapters around the singleton
+   * pipeline: tokenize RAW text (D05) → stride-384 chunk (D06) → for each window decode→classify→
+   * read the INJECTION-label score → MAX over windows → calibrate (D24).
+   *
+   * Never logs/persists the scanned or window text (Pitfall 5 / D16 spirit): returns numbers only.
+   * Never applies softmax to the pipeline `score` — it is already a probability; `calibrate` handles
+   * the logit re-derivation (Pitfall 4). Defensive: returns the zero result if the classifier is
+   * unloaded (`scan()` already guards this path, but the seam stays safe to call standalone).
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected runInference(text: string): InferenceOutput | Promise<InferenceOutput> {
-    // TODO(slice-b): real ONNX inference over the raw text (tokenize, stride-chunk, run, calibrate).
-    return { calibratedConfidence: 0 };
+  protected async runInference(text: string): Promise<InferenceOutput> {
+    if (!this.classifier) return { calibratedConfidence: 0 };
+
+    const ids = tokenize(text); // RAW text (D05); [] when the tokenizer is unloaded.
+    const windows = chunk(ids, { stride: WINDOW_STRIDE, max: WINDOW_MAX });
+
+    let raw = 0;
+    for (const win of windows) {
+      const windowText = decodeWindow(win);
+      // top_k:null → ALL class entries (the pipeline accepts null at runtime to return every label,
+      // but its TS option type is `number`, so cast the options); .find('INJECTION') is
+      // order-independent (Pattern 1) — never assume the top label is INJECTION.
+      const opts = { top_k: null } as unknown as { top_k: number };
+      const out = (await this.classifier(windowText, opts)) as Array<{
+        label: string;
+        score: number;
+      }>;
+      const inj = out.find((o) => o.label === 'INJECTION');
+      raw = Math.max(raw, inj?.score ?? 0); // missing INJECTION label → 0, never NaN.
+    }
+
+    return { calibratedConfidence: calibrate(raw, this.config.calibration), raw };
   }
 
   /** True when a model is configured. Until Slice B installs one, this is false. */
