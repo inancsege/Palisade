@@ -23,6 +23,7 @@
     "prepare": "test -f src/index.ts && tsup || true"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "chalk": "^5.4.1",

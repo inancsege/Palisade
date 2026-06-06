@@ -11,9 +11,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * load/encode/decode wiring (and the unloaded-state guards) with zero download — satisfying D20.
  */
 
-const encodeMock = vi.fn(() => [101, 202, 303]);
-const decodeMock = vi.fn(() => 'decoded text');
-const fromPretrainedMock = vi.fn(async () => ({ encode: encodeMock, decode: decodeMock }));
+// `vi.hoisted` so these mock fns exist when the hoisted `vi.mock` factory runs (avoids TDZ).
+const { encodeMock, decodeMock, fromPretrainedMock } = vi.hoisted(() => {
+  const encode = vi.fn(() => [101, 202, 303]);
+  const decode = vi.fn(() => 'decoded text');
+  return {
+    encodeMock: encode,
+    decodeMock: decode,
+    fromPretrainedMock: vi.fn(async () => ({ encode, decode })),
+  };
+});
 
 vi.mock('@huggingface/transformers', () => ({
   AutoTokenizer: {
