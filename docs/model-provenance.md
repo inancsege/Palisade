@@ -22,9 +22,37 @@ finalized in Phase 5 (no dataset names are invented here).
 | `protectai/deberta-v3-base-prompt-injection-v2` ✅ **CHOSEN** | **Apache-2.0** | `microsoft/deberta-v3-base` | ~700 MB | 95.49 | label `1` | bake-off winner (0.978) |
 
 Both ship an ONNX export under `onnx/` in their HF repo (required for `onnxruntime-node`), are
-pinned by HF commit hash + sha256 (Phase 1/2), and carry the same documented limitations: **English-only**
-and a known **false-positive tendency on legitimate system prompts** (relevant to Palisade's
-cascade-gating design and the README "Known limitations" section).
+pinned by HF commit hash + sha256 (Phase 1/2 — concrete pins below), and carry the same documented
+limitations: **English-only** and a known **false-positive tendency on legitimate system prompts**
+(relevant to Palisade's cascade-gating design and the README "Known limitations" section).
+
+### Pinned commit + per-file sha256 (D21 reproducibility, plan 02-07)
+
+The chosen model is pinned to a **concrete HF commit sha** (NOT the mutable `main` ref), resolved
+from `https://huggingface.co/api/models/protectai/deberta-v3-base-prompt-injection-v2` on
+**2026-06-06**. `palisade tier2 install` downloads the files below from
+`https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2/resolve/<MODEL_SHA>/<source>`
+and sha256-verifies each against these pins (network-free `verifyHash`); any mismatch deletes the
+partial install and exits non-zero. The same constants live in `src/detection/tier2/model-cache.ts`
+(`MODEL_SHA`, `MODEL_REPO`, `MODEL_FILES`).
+
+- **MODEL_REPO:** `protectai/deberta-v3-base-prompt-injection-v2`
+- **MODEL_SHA:** `e6535ca4ce3ba852083e75ec585d7c8aeb4be4c5`
+
+| Install path | HF source (`onnx/` layout) | sha256 |
+|--------------|----------------------------|--------|
+| `config.json` | `onnx/config.json` | `3093743035223c46b1497a72e939e56fa0a50afbd7bafbf7eb8aad060b8d23f8` |
+| `tokenizer.json` | `onnx/tokenizer.json` | `752fe5f0d5678ad563e1bd2ecc1ddf7a3ba7e2024d0ac1dba1a72975e26dff2f` |
+| `tokenizer_config.json` | `onnx/tokenizer_config.json` | `77d3dd1a9c30397a06545251ed9274bd92e4a85feb98497eeed50c920f962274` |
+| `special_tokens_map.json` | `onnx/special_tokens_map.json` | `b2f1b2f15f29a6b6d9d6ea4eca1675d2c231a71477f151d48f79cc83a625ba21` |
+| `added_tokens.json` | `onnx/added_tokens.json` | `dc046d04c9b0ada7ae6f1dc89c465801799acdf0c9a6aab8c15a1b2d5ca4e91f` |
+| `spm.model` | `onnx/spm.model` | `c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd` (matches HF LFS oid) |
+| `onnx/model.onnx` | `onnx/model.onnx` | `f0ea7f239f765aedbde7c9e163a7cb38a79c5b8853d3f76db5152172047b228c` (matches HF LFS oid) |
+
+> The two LFS files (`onnx/model.onnx`, `onnx/spm.model`) carry their sha256 as the HF `lfs.oid`;
+> the small JSON blobs were sha256'd from the pinned-commit download (their git-blob oids are SHA-1,
+> not sha256, so the content digest is recorded here). The install lays the tokenizer/config JSON at
+> the model-dir root and the weights under `onnx/` (the transformers.js local-model layout).
 
 ---
 
