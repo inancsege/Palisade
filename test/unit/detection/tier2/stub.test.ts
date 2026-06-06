@@ -9,8 +9,28 @@ vi.mock('../../../../src/utils/logger.js', () => ({
   },
 }));
 
+// Mock the tokenizer module so `initialize()` never loads a real 700MB model from disk (D20).
+// These error-contract / inflight-cap tests drive behavior via subclass-overridden runInference;
+// the model load itself is exercised by warmup.test.ts.
+vi.mock('../../../../src/detection/tier2/tokenizer.js', () => ({
+  loadTokenizer: vi.fn(async () => undefined),
+  tokenize: vi.fn(() => []),
+  decodeWindow: vi.fn(() => ''),
+  __resetTokenizerForTests: vi.fn(),
+}));
+
 import { Tier2Engine } from '../../../../src/detection/tier2/index.js';
 import { logger } from '../../../../src/utils/logger.js';
+
+/**
+ * A fake classifier injected via the `protected loadClassifier` seam so `initialize()` does not
+ * load a real pipeline. The subclasses below extend this to also override `runInference` for the
+ * error-contract / inflight-cap behaviors they actually test.
+ */
+function fakeClassifier() {
+  const fn = (async () => [{ label: 'INJECTION', score: 0 }]) as unknown;
+  return fn;
+}
 
 type Tier2ConfigSlice = ConstructorParameters<typeof Tier2Engine>[0];
 
@@ -82,6 +102,9 @@ describe('Tier2Engine stub', () => {
       // A subclass that forces the (stubbed) inference body to throw, proving scan()
       // catches it and degrades rather than rejecting.
       class FailingTier2Engine extends Tier2Engine {
+        protected async loadClassifier(): Promise<never> {
+          return fakeClassifier() as never;
+        }
         protected runInference(): { calibratedConfidence: number; raw?: number } {
           throw new Error('boom: simulated inference failure');
         }
@@ -119,6 +142,9 @@ describe('Tier2Engine stub', () => {
 
       // A subclass whose inference is slow (so scans overlap) and records concurrency.
       class SlowTier2Engine extends Tier2Engine {
+        protected async loadClassifier(): Promise<never> {
+          return fakeClassifier() as never;
+        }
         protected async runInference(): Promise<{ calibratedConfidence: number; raw?: number }> {
           admitted += 1;
           maxConcurrent = Math.max(maxConcurrent, this.currentInflight);
@@ -155,6 +181,9 @@ describe('Tier2Engine stub', () => {
     it('releases inflight slots after a scan completes so later scans can run', async () => {
       const inflightCap = 2;
       class SlowTier2Engine extends Tier2Engine {
+        protected async loadClassifier(): Promise<never> {
+          return fakeClassifier() as never;
+        }
         protected async runInference(): Promise<{ calibratedConfidence: number; raw?: number }> {
           await new Promise((r) => setTimeout(r, 10));
           return { calibratedConfidence: 0.4 };

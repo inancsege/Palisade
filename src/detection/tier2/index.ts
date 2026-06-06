@@ -1,10 +1,10 @@
-import type { TextClassificationPipeline } from '@huggingface/transformers';
+import { pipeline, env, type TextClassificationPipeline } from '@huggingface/transformers';
 import type { DetectionPolicyConfig } from '../../types/policy.js';
 import type { Tier2Result } from '../../types/verdict.js';
 import { logger } from '../../utils/logger.js';
 import { calibrate } from './calibrate.js';
 import { chunk } from './chunker.js';
-import { tokenize, decodeWindow } from './tokenizer.js';
+import { tokenize, decodeWindow, loadTokenizer } from './tokenizer.js';
 
 /**
  * The slice of policy config the Tier 2 engine needs. Mirrors `DetectionPolicyConfig['tier2']`
@@ -32,6 +32,13 @@ const DEFAULT_INFLIGHT_CAP = 16;
 const WINDOW_STRIDE = 384;
 /** Maximum tokens per inference window (the model's max sequence length, D06). */
 const WINDOW_MAX = 512;
+
+/**
+ * Token shapes to warm up before `server.listen()` (T2-02, D08). 512 = the model max (exercises the
+ * full graph); the smaller shapes JIT the common short-prompt path. Warmup must complete inside
+ * `initialize()` so the first real request never pays the cold-start spike (Pattern 6).
+ */
+const WARMUP_SHAPES = [32, 128, 512];
 
 /**
  * Tier 2 (local ML classifier) engine — STUB (Slice A).
@@ -65,17 +72,54 @@ export class Tier2Engine {
   }
 
   /**
-   * Warm up the model. No-op when no model is present (Slice A). In Slice B this loads the ONNX
-   * InferenceSession and runs the 32/128/512-token warmup before the proxy starts listening (D08).
+   * Load the singleton text-classification pipeline ONCE and run the 32/128/512-token warmup BEFORE
+   * resolving (T2-02, D08) — `PalisadeProxy.start()` awaits this before `server.listen()`, so warmup
+   * always precedes the first real request. Idempotent: a second call is a no-op once loaded.
+   *
+   * When Tier 2 is disabled or no model is configured, this is a fast no-op (no load, no warmup) —
+   * the v0.1 default path, so `serve` runs offline with zero ML cost (D17).
    */
   async initialize(): Promise<void> {
-    if (!this.hasModel()) {
-      // TODO(slice-b): load InferenceSession + 3-warmup (32/128/512 tokens) (T2-02)
+    if (this.initialized) return; // singleton: never reload on a repeated initialize().
+    if (!this.config.enabled || !this.hasModel()) {
       this.initialized = true;
       return;
     }
-    // TODO(slice-b): real ONNX warmup once the model exists.
+
+    // Forbid any request-time hub fetch; load strictly from the local cache dir (RESEARCH Pattern 7).
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+
+    // hasModel() guarantees model_path is a non-empty string here.
+    const modelDir = this.config.model_path as string;
+    await loadTokenizer(modelDir); // the chunker's token-boundary tokenizer (D05).
+    this.classifier = await this.loadClassifier(modelDir);
+    await this.warmup(); // 32/128/512-token warmups BEFORE we resolve (D08).
     this.initialized = true;
+  }
+
+  /**
+   * Load the ONNX text-classification pipeline from a local model dir — the SINGLE subclass-overridable
+   * model-touching seam (so unit tests inject a fake without a 700MB download, D20). Pins `dtype:'fp32'`
+   * to match the bake-off numbers (Pitfall 6) and `device:'cpu'` (the proven `bakeoff.mjs` call shape).
+   */
+  protected async loadClassifier(modelDir: string): Promise<TextClassificationPipeline> {
+    return pipeline('text-classification', modelDir, { device: 'cpu', dtype: 'fp32' });
+  }
+
+  /**
+   * Run three warmup inferences (32/128/512-token filler strings) through the loaded pipeline so the
+   * first real request doesn't pay the JIT/graph-optimization cost (T2-02, Pattern 6). Results are
+   * discarded. No-op when the classifier is unloaded. The 512-token shape is the load-bearing one.
+   */
+  private async warmup(): Promise<void> {
+    if (!this.classifier) return;
+    const opts = { top_k: null } as unknown as { top_k: number };
+    for (const n of WARMUP_SHAPES) {
+      // Deterministic ASCII filler; word-count ≈ token-count for " word" (~1 token each).
+      const filler = Array.from({ length: n }, () => 'word').join(' ');
+      await this.classifier(filler, opts); // discarded — this JITs the graph at each shape.
+    }
   }
 
   /**
@@ -115,10 +159,13 @@ export class Tier2Engine {
   }
 
   /**
-   * Release the (future) ONNX session. Safe to call before `initialize()` and idempotent.
+   * Dispose the singleton ONNX session and null the field (Pitfall 7). Optional-chained so absence
+   * of `dispose` (some transformers versions) is safe; idempotent and safe to call before
+   * `initialize()` (no classifier → nothing to dispose).
    */
   async close(): Promise<void> {
-    // TODO(slice-b): release the InferenceSession handle.
+    await this.classifier?.dispose?.();
+    this.classifier = null;
     this.initialized = false;
   }
 
