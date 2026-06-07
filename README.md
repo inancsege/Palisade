@@ -10,10 +10,10 @@ A standalone security layer that sits between any AI agent and its LLM provider,
 
 AI agents are under active attack through their own tool ecosystems. The problem is structural, not hypothetical:
 
-- **Cisco's AI Defense team** tested a single community skill and found **9 security vulnerabilities** — including silent data exfiltration via embedded `curl` commands and direct prompt injection that bypassed the agent's safety guidelines without user awareness.
-- **The ClawHavoc campaign** planted **800+ malicious extensions** across a major agent skill registry (~20% of the entire marketplace), distributing infostealers disguised as productivity tools.
-- **26% of 31,000 agent skills** analyzed across platforms contained at least one exploitable vulnerability: command injection, credential theft, or prompt manipulation.
-- **Academic research** (IEEE S&P 2026) shows that adaptive attacks exceed **90% bypass rates** against 12 published prompt injection defenses.
+- **Cisco's AI Defense team** scanned OpenClaw's top-ranked community skill and found **9 security vulnerabilities** (two critical) — including silent data exfiltration via an embedded `curl` command and direct prompt injection that bypassed the agent's safety guidelines without user awareness. ([Cisco Blogs](https://blogs.cisco.com/ai/personal-ai-agents-like-openclaw-are-a-security-nightmare))
+- The **ClawHavoc campaign** planted **800+ malicious skills** across OpenClaw's ClawHub marketplace, distributing infostealers disguised as productivity tools. ([VirusTotal](https://blog.virustotal.com/2026/02/from-automation-to-infection-how.html))
+- **26% of 31,000+ agent skills** analyzed across two major marketplaces contained at least one exploitable vulnerability — prompt injection the most prevalent. ([_Agent Skills in the Wild_, arXiv:2601.10338](https://arxiv.org/abs/2601.10338))
+- A 2025 study from OpenAI, Anthropic, and Google DeepMind shows adaptive attacks exceed **90% bypass rates** against all 12 published prompt-injection defenses tested. ([_The Attacker Moves Second_, arXiv:2510.09023](https://arxiv.org/abs/2510.09023))
 
 Existing tools address fragments of the problem. **Static scanners** catch threats before installation — but a clean skill can start exfiltrating after deployment. **Infrastructure sandboxes** isolate at the kernel level — but don't understand what the prompt _says_. **LLM-based detectors** add latency and cost per request.
 
