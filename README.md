@@ -35,12 +35,12 @@ Agent Framework ──► Palisade ──► LLM Provider
 Fast regex and heuristic filters that catch known injection signatures before any heavier analysis runs. Handles role marker injection (`SYSTEM:`, `[INST]`), delimiter escapes, encoded payloads (base64, URL encoding, Unicode homoglyphs), and common override templates ("ignore previous instructions").
 
 **Tier 2 — ML Classifier (~4-8ms, CPU-only)**
-A fine-tuned lightweight model that scores each sentence in the input independently from 0.0 (safe) to 1.0 (injection). Sentence-level granularity means you know _which_ part of the input is suspicious, not just that something triggered. Ships as a ~25MB model inside the package — no external API calls, no GPU.
+A fine-tuned lightweight model that scores each sentence in the input independently from 0.0 (safe) to 1.0 (injection). Runs a local ONNX model (~738MB), downloaded once via `palisade tier2 install` and cached on disk — no external API calls, no GPU.
 
-**Tier 3 — Behavioral Policy Engine (continuous)**
+**Tier 3 — Behavioral Policy Engine (planned — not yet implemented)**
 Runtime monitoring of what the agent actually _does_ after receiving the LLM response. Per-tool capability declarations are checked against real execution: a weather tool calling `curl` to an undeclared IP gets blocked, a document summarizer attempting to write to `~/.ssh/` gets blocked, a skill reading `.env` when its manifest declares no filesystem access gets blocked.
 
-### Canary Tokens
+### Canary Tokens (planned — not yet implemented)
 
 Palisade injects traceable markers into sensitive context (credentials, user data). If these markers appear in outbound network traffic or tool outputs directed to undeclared endpoints, the source skill/tool is immediately flagged and quarantined.
 
@@ -54,6 +54,10 @@ Palisade injects traceable markers into sensitive context (credentials, user dat
 | **Vercel AI SDK** | Middleware function |
 | **Direct API** | HTTP proxy mode (point your base URL at Palisade) |
 | **Any agent** | Standalone proxy — swap your API base URL |
+
+> **Available today:** the **HTTP proxy mode** (the last two rows) — works with any framework or
+> direct API calls. The framework-specific adapters (OpenClaw, LangGraph, CrewAI, Vercel) are
+> **planned** and not yet implemented.
 
 The simplest integration requires zero framework changes — run Palisade as a local proxy server and point your `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL` at it:
 
@@ -103,7 +107,7 @@ palisade serve --port 8340 --upstream https://api.anthropic.com
 |---|---|---|
 | Core runtime / proxy | **TypeScript** (Node.js) | Native compatibility with major agent frameworks |
 | Injection classifier | **Python** (FastAPI microservice) | ML model serving, hot-swappable classifier versions |
-| ML model | **ONNX Runtime** (CPU) | Cross-platform, no GPU dependency, ~25MB footprint |
+| ML model | **ONNX Runtime** (CPU) | Cross-platform, no GPU dependency, ~738MB (downloaded on demand via `palisade tier2 install`) |
 | Pattern store | **Qdrant** (embedded mode) | Vector similarity for injection pattern matching against known attack corpus |
 | Policy definitions | **YAML + JSON Schema** | Declarative tool capability manifests, human-readable |
 | Event log | **SQLite** | Local-first, zero-config, aligns with agent-local storage patterns |
@@ -136,14 +140,20 @@ Palisade is **not** a replacement for infrastructure sandboxing. Use it _alongsi
 ## Quick Start
 
 ```bash
-# Install
-npm install -g palisade
+# Install from source (the `palisade` name on npm is an unrelated package — install from this repo)
+git clone https://github.com/inancsege/Palisade.git
+cd Palisade
+npm install && npm run build
+npm link            # makes the `palisade` command available from this checkout
 
-# Scan a skill/tool directory before installing
+# Scan a directory for injection patterns
 palisade scan ./my-agent-skill/
 
-# Run as a proxy (zero-config integration)
+# Run as a proxy (zero-config integration), then point ANTHROPIC_BASE_URL at it
 palisade serve --port 8340 --upstream https://api.anthropic.com
+
+# Wrap the Claude Code CLI with injection protection in one command
+palisade claude
 
 # Run with a policy file
 palisade serve --policy ./policy.yaml --port 8340
