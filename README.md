@@ -21,7 +21,7 @@ Palisade fills the gap: a **lightweight, local-first runtime layer** that combin
 
 ## How It Works
 
-Palisade operates as a **proxy middleware** between your agent framework and the LLM API. It inspects both directions of traffic:
+Palisade operates as a **proxy middleware** between your agent framework and the LLM API. Today it inspects **outbound requests** before they reach the model; the response-side action gate (the return arrow below) is **planned, not yet implemented**:
 
 ```
 Agent Framework ──► Palisade ──► LLM Provider
@@ -34,8 +34,8 @@ Agent Framework ──► Palisade ──► LLM Provider
 **Tier 1 — Pattern Matching (~1ms)**
 Fast regex and heuristic filters that catch known injection signatures before any heavier analysis runs. Handles role marker injection (`SYSTEM:`, `[INST]`), delimiter escapes, encoded payloads (base64, URL encoding, Unicode homoglyphs), and common override templates ("ignore previous instructions").
 
-**Tier 2 — ML Classifier (~4-8ms, CPU-only)**
-A fine-tuned lightweight model that scores each sentence in the input independently from 0.0 (safe) to 1.0 (injection). Runs a local ONNX model (~738MB), downloaded once via `palisade tier2 install` and cached on disk — no external API calls, no GPU.
+**Tier 2 — ML Classifier (~20ms warm, CPU-only)**
+A fine-tuned DeBERTa classifier that scores the input from 0.0 (safe) to 1.0 (injection), splitting long inputs into overlapping windows and taking the highest score. Runs a local ONNX model (~738MB), downloaded once via `palisade tier2 install` and cached on disk — no external API calls, no GPU.
 
 **Tier 3 — Behavioral Policy Engine (planned — not yet implemented)**
 Runtime monitoring of what the agent actually _does_ after receiving the LLM response. Per-tool capability declarations are checked against real execution: a weather tool calling `curl` to an undeclared IP gets blocked, a document summarizer attempting to write to `~/.ssh/` gets blocked, a skill reading `.env` when its manifest declares no filesystem access gets blocked.
@@ -76,7 +76,7 @@ palisade serve --port 8340 --upstream https://api.anthropic.com
 │  ┌──────────┐   ┌──────────────┐   ┌───────────────────┐  │
 │  │  Tier 1   │   │    Tier 2     │   │      Tier 3       │  │
 │  │  Pattern  │──►│ ML Classifier │──►│ Behavioral Policy │  │
-│  │  Filter   │   │  (CPU, ~25MB) │   │   Engine (YAML)   │  │
+│  │  Filter   │   │ (CPU, ~738MB) │   │   Engine (YAML)   │  │
 │  └──────────┘   └──────────────┘   └───────────────────┘  │
 │       │                │                     │             │
 │       ▼                ▼                     ▼             │
@@ -105,14 +105,14 @@ palisade serve --port 8340 --upstream https://api.anthropic.com
 
 | Component | Technology | Rationale |
 |---|---|---|
-| Core runtime / proxy | **TypeScript** (Node.js) | Native compatibility with major agent frameworks |
-| Injection classifier | **Python** (FastAPI microservice) | ML model serving, hot-swappable classifier versions |
+| Core runtime / proxy | **TypeScript** (Node.js ≥ 20) | Native compatibility with major agent frameworks |
+| Tier 1 patterns | **Regex pattern registry** (TypeScript) | Compiled-once, ReDoS-tested injection signatures |
+| Tier 2 classifier | **@huggingface/transformers** (ONNX, in-process) | Local CPU inference in the Node process — no separate service, no GPU |
 | ML model | **ONNX Runtime** (CPU) | Cross-platform, no GPU dependency, ~738MB (downloaded on demand via `palisade tier2 install`) |
-| Pattern store | **Qdrant** (embedded mode) | Vector similarity for injection pattern matching against known attack corpus |
-| Policy definitions | **YAML + JSON Schema** | Declarative tool capability manifests, human-readable |
-| Event log | **SQLite** | Local-first, zero-config, aligns with agent-local storage patterns |
-| Dashboard | **React** (optional) | WebSocket-based real-time threat feed |
-| CLI | **TypeScript** | `palisade scan`, `palisade serve`, `palisade audit`, `palisade report` |
+| Policy definitions | **YAML + JSON Schema** (AJV) | Declarative policy config, human-readable |
+| Event log | **sql.js** (WASM SQLite) | Local-first, zero-config, no native build step |
+| Dashboard | **(planned)** | Real-time threat feed — not yet implemented |
+| CLI | **commander** (TypeScript) | `palisade serve / scan / audit / report / claude / tier2` |
 
 ## Relationship to Existing Tools
 
@@ -123,15 +123,15 @@ palisade serve --port 8340 --upstream https://api.anthropic.com
 | **NVIDIA NemoClaw** | Kernel-level container isolation | Understands prompt _content_, not just process boundaries |
 | **StackOne Defender** | Tool-call injection filtering | Adds behavioral policy enforcement + canary token tracking |
 | **Rebuff** | Multi-layer injection detection | Actively maintained, ONNX-based (no OpenAI dependency), behavioral layer |
-| **Meta Prompt Guard** | Transformer classifier | 25MB vs 1GB+, CPU-only, sentence-level granularity |
+| **Meta Prompt Guard** | Transformer classifier | CPU-only (no GPU), runs in-process with no external API and zero per-request cost |
 | **OpenAI Guardrails** | LLM-based function call validation | No external API dependency, zero per-request cost |
 
 Palisade is **not** a replacement for infrastructure sandboxing. Use it _alongside_ container isolation. Palisade is the **semantic layer** — it understands what instructions mean, not just what processes run.
 
 ## Roadmap
 
-- [ ] **v0.1** — Tier 1 pattern engine + proxy mode + CLI (`palisade serve`, `palisade scan`)
-- [ ] **v0.2** — Tier 2 ML classifier (ONNX, CPU-only) + sentence-level scoring
+- [x] **v0.1** — Tier 1 pattern engine + proxy mode + CLI (`palisade serve`, `palisade scan`)
+- [x] **v0.2** — Tier 2 ML classifier (ONNX, CPU-only) wired into the cascade; benchmark suite in progress
 - [ ] **v0.3** — Tier 3 behavioral policy engine (YAML capability manifests)
 - [ ] **v0.4** — Canary token injection + exfiltration anomaly detection
 - [ ] **v0.5** — Dashboard + event log + skill trust scoring
