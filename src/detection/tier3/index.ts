@@ -21,6 +21,11 @@ export interface Tier3Evaluation {
   violatedTools: string[];
   /** The offending calls, for precise response rewriting by the gate. */
   blockedCalls: BlockedCall[];
+  /**
+   * Every host evaluated against the egress policy (allowed AND blocked), for
+   * the cross-request anomaly tracker (T4-04).
+   */
+  egressHosts: string[];
 }
 
 const SEVERITY = { allow: 0, warn: 1, block: 2 } as const;
@@ -40,12 +45,13 @@ export class Tier3Engine {
   evaluate(calls: ToolCall[]): Tier3Evaluation {
     const config = this.policy.detection.tier3;
     if (!config.enabled || calls.length === 0) {
-      return { consulted: config.enabled && calls.length > 0, action: 'allow', matches: [], toolCount: calls.length, violatedTools: [], blockedCalls: [] };
+      return { consulted: config.enabled && calls.length > 0, action: 'allow', matches: [], toolCount: calls.length, violatedTools: [], blockedCalls: [], egressHosts: [] };
     }
 
     const matches: PatternMatch[] = [];
     const violatedTools = new Set<string>();
     const blockedCalls: BlockedCall[] = [];
+    const egressHosts = new Set<string>();
     // Severity is the stricter of the capability action and the unknown-tool action.
     let severity = 0;
 
@@ -63,6 +69,7 @@ export class Tier3Engine {
         severity = Math.max(severity, SEVERITY[config.unknown_tool]);
         continue;
       }
+      for (const host of verdict.egressHosts) egressHosts.add(host);
       if (!verdict.allowed) {
         for (const v of verdict.violations) {
           matches.push(this.makeMatch(v.capability, `capability.${v.capability}`, v.detail, v.value));
@@ -80,6 +87,7 @@ export class Tier3Engine {
       toolCount: calls.length,
       violatedTools: [...violatedTools],
       blockedCalls,
+      egressHosts: [...egressHosts],
     };
   }
 

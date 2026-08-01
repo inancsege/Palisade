@@ -11,6 +11,8 @@ export interface StreamingGateSummary {
   matches: PatternMatch[];
   violations: GateViolation[];
   threatScore: number;
+  /** Egress hosts evaluated this stream (allowed and blocked) — for anomaly tracking. */
+  egressHosts: string[];
 }
 
 const SEVERITY = { allow: 0, warn: 1, block: 2 } as const;
@@ -74,6 +76,7 @@ class AnthropicStreamingGate implements StreamingGate {
   private held = new Map<number, HeldAnthropicBlock>();
   private matches: PatternMatch[] = [];
   private violations: GateViolation[] = [];
+  private egressHosts: string[] = [];
   private worstSeverity = 0;
   private sawEnd = false;
   private endPayload: string | null = null;
@@ -139,6 +142,8 @@ class AnthropicStreamingGate implements StreamingGate {
   private resolveBlock(held: HeldAnthropicBlock, withStop = false): string[] {
     const call = buildHeldCall(held);
     const evaluation = this.responseGate.evaluateCalls([call]);
+    // Allowed AND blocked calls contribute egress hosts to the anomaly tracker.
+    this.egressHosts.push(...evaluation.egressHosts);
     if (evaluation.action === 'allow') {
       // The real content_block_stop is already in held.payloads when the block
       // completed normally; `withStop` synthesizes one for truncated streams.
@@ -178,6 +183,7 @@ class AnthropicStreamingGate implements StreamingGate {
       matches: this.matches,
       violations: this.violations,
       threatScore: computeThreatScore(this.matches).overall,
+      egressHosts: this.egressHosts,
     };
   }
 }
@@ -194,6 +200,7 @@ class OpenAIStreamingGate implements StreamingGate {
   private byIndex = new Map<number, HeldOpenAICall>();
   private matches: PatternMatch[] = [];
   private violations: GateViolation[] = [];
+  private egressHosts: string[] = [];
   private worstSeverity = 0;
   private sawEnd = false;
 
@@ -261,6 +268,8 @@ class OpenAIStreamingGate implements StreamingGate {
       }
       const call: ToolCall = { id: held.id, name: held.name ?? 'unknown', arguments: args };
       const evaluation = this.responseGate.evaluateCalls([call]);
+      // Allowed AND blocked calls contribute egress hosts to the anomaly tracker.
+      this.egressHosts.push(...evaluation.egressHosts);
       if (evaluation.action === 'allow') continue;
       anyBlocked = true;
       this.matches.push(...evaluation.matches);
@@ -304,6 +313,7 @@ class OpenAIStreamingGate implements StreamingGate {
       matches: this.matches,
       violations: this.violations,
       threatScore: computeThreatScore(this.matches).overall,
+      egressHosts: this.egressHosts,
     };
   }
 }

@@ -22,6 +22,11 @@ export interface CapabilityVerdict {
   evaluated: boolean;
   allowed: boolean;
   violations: CapabilityViolation[];
+  /**
+   * Hosts evaluated against the egress policy — allowed AND blocked — so the
+   * anomaly tracker can see the egress that actually flowed.
+   */
+  egressHosts: string[];
 }
 
 // Name-derived capability hints. A tool's manifest declarations are the authority:
@@ -243,6 +248,7 @@ export function classifyToolCall(
 ): CapabilityVerdict {
   const violations: CapabilityViolation[] = [];
   const evaluatedCaps = new Set<Capability>();
+  const egressHosts = new Set<string>();
   const strings: string[] = [];
   collectStrings(call.arguments, strings);
 
@@ -256,6 +262,7 @@ export function classifyToolCall(
     const policy = declaredNetwork ?? caps.network_egress;
     for (const s of strings) {
       for (const host of extractHosts(s)) {
+        egressHosts.add(host);
         const allowed =
           policy === 'allow' || (policy === 'deny' ? false : hostAllowed(host, policy.allow));
         if (!allowed) {
@@ -319,5 +326,6 @@ export function classifyToolCall(
     evaluated: evaluatedCaps.size > 0,
     allowed: violations.length === 0,
     violations,
+    egressHosts: [...egressHosts],
   };
 }

@@ -22,6 +22,8 @@ export interface GateResult {
   matches: PatternMatch[];
   threatScore: number;
   violations: GateViolation[];
+  /** Egress hosts evaluated this request (allowed and blocked) — for anomaly tracking. */
+  egressHosts: string[];
 }
 
 /**
@@ -51,6 +53,7 @@ export class ResponseGate {
         matches: evaluation.matches,
         threatScore: 0,
         violations: [],
+        egressHosts: evaluation.egressHosts,
       };
     }
 
@@ -68,6 +71,7 @@ export class ResponseGate {
         matches: evaluation.matches,
         threatScore,
         violations,
+        egressHosts: evaluation.egressHosts,
       };
     }
 
@@ -79,6 +83,7 @@ export class ResponseGate {
         matches: evaluation.matches,
         threatScore,
         violations,
+        egressHosts: evaluation.egressHosts,
       };
     }
 
@@ -90,6 +95,7 @@ export class ResponseGate {
       matches: evaluation.matches,
       threatScore,
       violations,
+      egressHosts: evaluation.egressHosts,
     };
   }
 
