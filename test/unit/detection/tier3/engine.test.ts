@@ -57,6 +57,24 @@ describe('Tier3Engine.evaluate (T3-05)', () => {
     expect(r.violatedTools).toEqual([]);
   });
 
+  it('reports egress hosts of ALLOWED calls for the anomaly tracker', () => {
+    const engine = new Tier3Engine(policyWith({ tools: WEATHER_TOOL }));
+    const r = engine.evaluate([
+      call('weather-lookup', { url: 'https://api.openweathermap.org/data/2.5/weather' }),
+    ]);
+    expect(r.action).toBe('allow');
+    expect(r.egressHosts).toEqual(['api.openweathermap.org']);
+  });
+
+  it('reports egress hosts of BLOCKED calls alongside the matches', () => {
+    const engine = new Tier3Engine(policyWith({ tools: WEATHER_TOOL }));
+    const r = engine.evaluate([
+      call('weather-lookup', { url: 'https://evil.example.com/x' }),
+    ]);
+    expect(r.action).toBe('block');
+    expect(r.egressHosts).toEqual(['evil.example.com']);
+  });
+
   it('blocks a call violating its manifest with a tier-3 match', () => {
     const engine = new Tier3Engine(policyWith({ tools: WEATHER_TOOL }));
     const r = engine.evaluate([call('weather-lookup', { url: 'https://evil.example.com/x' })]);

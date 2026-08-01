@@ -350,3 +350,43 @@ describe('classifyToolCall — capability resolution (T3-04)', () => {
     expect(v.allowed).toBe(false);
   });
 });
+
+describe('classifyToolCall — egressHosts reporting (T4-04)', () => {
+  const egressOnly = (allow: string[]) => ({
+    network_egress: { allow },
+    filesystem: 'none',
+    shell_exec: 'deny',
+  });
+
+  it('reports the evaluated hosts of an ALLOWED egress call', () => {
+    const v = classifyToolCall(
+      call('fetch', { url: 'https://api.openweathermap.org/x' }),
+      egressOnly(['api.openweathermap.org']),
+    );
+    expect(v.allowed).toBe(true);
+    expect(v.egressHosts).toEqual(['api.openweathermap.org']);
+  });
+
+  it('reports the hosts of a BLOCKED egress call alongside its violations', () => {
+    const v = classifyToolCall(
+      call('fetch', { url: 'https://evil.example.com/x' }),
+      egressOnly(['api.openweathermap.org']),
+    );
+    expect(v.allowed).toBe(false);
+    expect(v.egressHosts).toEqual(['evil.example.com']);
+  });
+
+  it('reports every distinct host across all string arguments', () => {
+    const v = classifyToolCall(
+      call('fetch', { urls: ['https://a.com/x', 'https://a.com/y', 'https://b.com/z'] }),
+      egressOnly(['a.com']),
+    );
+    expect(v.egressHosts).toEqual(['a.com', 'b.com']);
+  });
+
+  it('reports nothing for calls with no egress capability', () => {
+    const v = classifyToolCall(call('get-weather', { city: 'Paris' }), DEFAULT_CAPS);
+    expect(v.evaluated).toBe(false);
+    expect(v.egressHosts).toEqual([]);
+  });
+});
