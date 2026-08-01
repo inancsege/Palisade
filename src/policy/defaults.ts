@@ -19,5 +19,6 @@ export const defaultPolicy: PolicyConfig = {
       max_input_chars: 4000,
     },
     canary: { enabled: false, rotate_interval: 3600 },
+    tier3: { enabled: false, action: 'block', block_response: false, unknown_tool: 'block' },
   },
 };

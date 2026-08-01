@@ -112,6 +112,16 @@ export const policySchema = {
           },
           additionalProperties: false,
         },
+        tier3: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            action: { type: 'string', enum: ['allow', 'warn', 'block'] },
+            block_response: { type: 'boolean' },
+            unknown_tool: { type: 'string', enum: ['warn', 'block'] },
+          },
+          additionalProperties: false,
+        },
       },
       additionalProperties: false,
     },

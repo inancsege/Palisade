@@ -107,6 +107,7 @@ export function mergePolicyWithDefaults(partial: Partial<PolicyConfig>): PolicyC
       tier1: { ...defaultPolicy.detection.tier1, ...partial.detection?.tier1 },
       tier2: { ...defaultPolicy.detection.tier2, ...partial.detection?.tier2 },
       canary: { ...defaultPolicy.detection.canary, ...partial.detection?.canary },
+      tier3: { ...defaultPolicy.detection.tier3, ...partial.detection?.tier3 },
     },
   };
 }

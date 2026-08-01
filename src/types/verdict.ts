@@ -7,7 +7,10 @@ export type PatternCategory =
   | 'encoded_payload'
   | 'exfiltration'
   | 'unicode_homoglyph'
-  | 'custom';
+  | 'custom'
+  | 'network_egress'
+  | 'filesystem'
+  | 'shell_exec';
 
 export interface PatternMatch {
   patternId: string;
@@ -39,7 +42,7 @@ export interface Tier2Result {
 }
 
 /**
- * Tier 3 (hosted API fallback) result.
+ * Tier 3 (behavioral policy engine) result, produced by the response-side action gate.
  * `consulted` is false when Tier 3 was wired but skipped (disabled, gated, or short-circuited).
  */
 export interface Tier3Result {

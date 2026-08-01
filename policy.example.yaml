@@ -50,6 +50,11 @@ detection:
     enabled: true
     threshold: 0.75
     action: block
+  tier3:
+    enabled: false
+    action: block
+    block_response: false
+    unknown_tool: block
   canary:
     enabled: true
     rotate_interval: 3600

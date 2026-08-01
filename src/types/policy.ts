@@ -46,4 +46,10 @@ export interface DetectionPolicyConfig {
     enabled: boolean;
     rotate_interval: number;
   };
+  tier3: {
+    enabled: boolean;
+    action: VerdictAction;
+    block_response: boolean;
+    unknown_tool: 'warn' | 'block';
+  };
 }
