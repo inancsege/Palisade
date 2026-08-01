@@ -1,4 +1,7 @@
 import { randomBytes } from 'node:crypto';
+import type { LLMProvider } from './providers/base.js';
+import { AnthropicProvider } from './providers/anthropic.js';
+import { OpenAIProvider } from './providers/openai.js';
 
 export const CANARY_TOKEN_PREFIX = 'palcanary-';
 /** 16 random bytes → 32 lowercase hex chars after the prefix. */
@@ -90,4 +93,66 @@ export class CanaryStore {
     this.previous = { token: this.active.token, rotatedAt: previousRotatedAt };
     this.active = { token: generateCanaryToken(), rotatedAt: this.now() };
   }
+}
+
+/**
+ * Append the canary token to a request's system prompt (immutable — returns a
+ * new body). Runs AFTER request-side scanning so the token never trips the
+ * pattern engine. Unsupported provider shapes pass through unchanged.
+ */
+export function injectCanaryToken(
+  body: Record<string, unknown>,
+  provider: LLMProvider,
+  token: string,
+): Record<string, unknown> {
+  if (provider instanceof AnthropicProvider) return injectAnthropicSystem(body, token);
+  if (provider instanceof OpenAIProvider) return injectOpenAISystem(body, token);
+  return body;
+}
+
+function injectAnthropicSystem(
+  body: Record<string, unknown>,
+  token: string,
+): Record<string, unknown> {
+  const system = body.system;
+  if (typeof system === 'string') {
+    return { ...body, system: `${system}\n\n${token}` };
+  }
+  if (Array.isArray(system)) {
+    return { ...body, system: [...system, { type: 'text', text: token }] };
+  }
+  if (system === undefined) {
+    return { ...body, system: token };
+  }
+  return body;
+}
+
+function injectOpenAISystem(
+  body: Record<string, unknown>,
+  token: string,
+): Record<string, unknown> {
+  if (!Array.isArray(body.messages)) return body;
+  const messages = body.messages;
+  const systemIndex = messages.findIndex(
+    (m): m is Record<string, unknown> =>
+      !!m && typeof m === 'object' && (m as Record<string, unknown>).role === 'system',
+  );
+
+  if (systemIndex === -1) {
+    return { ...body, messages: [{ role: 'system', content: token }, ...messages] };
+  }
+
+  const system = messages[systemIndex];
+  const next = [...messages];
+  if (typeof system.content === 'string') {
+    next[systemIndex] = { ...system, content: `${system.content}\n\n${token}` };
+  } else if (Array.isArray(system.content)) {
+    next[systemIndex] = {
+      ...system,
+      content: [...system.content, { type: 'text', text: token }],
+    };
+  } else {
+    next[systemIndex] = { ...system, content: token };
+  }
+  return { ...body, messages: next };
 }
