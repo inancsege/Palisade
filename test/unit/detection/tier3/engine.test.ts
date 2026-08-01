@@ -106,7 +106,7 @@ describe('Tier3Engine.evaluate (T3-05)', () => {
   });
 
   it('blocks unclassifiable tools when unknown_tool is block (fail closed via defaults)', () => {
-    const engine = new Tier3Engine(policyWith({ unknown_tool: 'block' }));
+    const engine = new Tier3Engine(policyWith({ tier3: { unknown_tool: 'block' } }));
     const r = engine.evaluate([call('get-weather', { city: 'Paris' })]);
     expect(r.action).toBe('block');
     expect(r.matches).toHaveLength(1);
@@ -115,7 +115,7 @@ describe('Tier3Engine.evaluate (T3-05)', () => {
   });
 
   it('warns on unclassifiable tools when unknown_tool is warn', () => {
-    const engine = new Tier3Engine(policyWith({ unknown_tool: 'warn' }));
+    const engine = new Tier3Engine(policyWith({ tier3: { unknown_tool: 'warn' } }));
     const r = engine.evaluate([call('get-weather', { city: 'Paris' })]);
     expect(r.action).toBe('warn');
     expect(r.matches).toHaveLength(1);

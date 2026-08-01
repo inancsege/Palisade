@@ -228,11 +228,11 @@ describe('classifyToolCall — shell_exec (T3-04)', () => {
 
 describe('classifyToolCall — capability resolution (T3-04)', () => {
   it('evaluates manifest-declared capabilities even when the name gives no hint', () => {
-    const v = classifyToolCall(call('weather-lookup', { url: 'https://evil.com' }), {
-      network_egress: { allow: ['api.openweathermap.org'] },
-      filesystem: 'none',
-      shell_exec: 'deny',
-    });
+    const v = classifyToolCall(
+      call('weather-lookup', { url: 'https://evil.com' }),
+      DEFAULT_CAPS,
+      { network_egress: { allow: ['api.openweathermap.org'] } },
+    );
     expect(v.evaluated).toBe(true);
     expect(v.allowed).toBe(false);
   });
