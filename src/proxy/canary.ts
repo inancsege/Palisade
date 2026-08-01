@@ -8,6 +8,8 @@ export const CANARY_TOKEN_PREFIX = 'palcanary-';
 export const CANARY_TOKEN_BYTES = 16;
 /** Fixed grace window: a rotated-away token still matches for this long (delayed exfiltration). */
 export const CANARY_GRACE_SECONDS = 900;
+/** Rolling window kept for streamed text: must be ≥ token length so a token split across chunks is caught. */
+export const CANARY_SCAN_WINDOW_CHARS = 64;
 
 export function generateCanaryToken(): string {
   return `${CANARY_TOKEN_PREFIX}${randomBytes(CANARY_TOKEN_BYTES).toString('hex')}`;
@@ -64,13 +66,21 @@ export class CanaryStore {
 
   /** True when `text` contains the active token or a rotated-away token still in its grace window. */
   isActiveToken(text: string): boolean {
+    return this.findActiveToken(text) !== null;
+  }
+
+  /** The specific token found in `text` (active, or a rotated-away token within grace), or null. */
+  findActiveToken(text: string): string | null {
     this.rotateIfDue();
-    const nowMs = this.now();
-    if (this.active && text.includes(this.active.token)) return true;
-    if (this.previous && nowMs - this.previous.rotatedAt <= this.graceMs) {
-      return text.includes(this.previous.token);
+    if (this.active && text.includes(this.active.token)) return this.active.token;
+    if (
+      this.previous &&
+      this.now() - this.previous.rotatedAt <= this.graceMs &&
+      text.includes(this.previous.token)
+    ) {
+      return this.previous.token;
     }
-    return false;
+    return null;
   }
 
   /** Force an immediate rotation (keeps the previous token within its grace window). */
@@ -142,17 +152,42 @@ function injectOpenAISystem(
     return { ...body, messages: [{ role: 'system', content: token }, ...messages] };
   }
 
-  const system = messages[systemIndex];
-  const next = [...messages];
-  if (typeof system.content === 'string') {
-    next[systemIndex] = { ...system, content: `${system.content}\n\n${token}` };
-  } else if (Array.isArray(system.content)) {
-    next[systemIndex] = {
-      ...system,
-      content: [...system.content, { type: 'text', text: token }],
-    };
-  } else {
-    next[systemIndex] = { ...system, content: token };
-  }
+  const next = messages.map((m, i) => {
+    if (i !== systemIndex) return m;
+    const sys = m as Record<string, unknown>;
+    if (typeof sys.content === 'string') return { ...sys, content: `${sys.content}\n\n${token}` };
+    if (Array.isArray(sys.content)) {
+      return { ...sys, content: [...sys.content, { type: 'text', text: token }] };
+    }
+    return { ...sys, content: token };
+  });
   return { ...body, messages: next };
+}
+
+/** Returns the active (or grace-window) canary token found in `text`, or null. */
+export function scanForCanary(text: string, store: CanaryStore): string | null {
+  return store.findActiveToken(text);
+}
+
+/**
+ * Incremental scanner for streamed text. Keeps only a fixed-size trailing window
+ * so the scan stays O(1) per chunk; a token split across chunk boundaries is
+ * caught the moment its last characters arrive.
+ */
+export class CanaryTextScanner {
+  private window = '';
+  private readonly windowChars: number;
+
+  constructor(
+    private store: CanaryStore,
+    windowChars: number = CANARY_SCAN_WINDOW_CHARS,
+  ) {
+    this.windowChars = windowChars;
+  }
+
+  /** Feed a text chunk; returns the matched token or null. */
+  push(chunk: string): string | null {
+    this.window = (this.window + chunk).slice(-this.windowChars);
+    return this.store.findActiveToken(this.window);
+  }
 }

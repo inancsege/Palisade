@@ -25,6 +25,11 @@ export function parseSSELine(line: string): { field: string; value: string } | n
  * When `gate` is provided, the stream is forwarded line-by-line so held events
  * (tool_use blocks) can be withheld and rewritten; without a gate the response is
  * piped chunk-by-chunk, byte-identical to the upstream.
+ *
+ * When `onText` is provided (e.g. canary scanning), the stream is ALSO forwarded
+ * line-by-line (even without a gate) and `onText` runs on every text delta BEFORE
+ * the payload is written. Returning false aborts the stream: pending payloads are
+ * dropped, held gate payloads are NOT flushed, and the client response ends.
  */
 export async function pipeStreamingResponse(
   upstreamResponse: Response,
@@ -33,6 +38,7 @@ export async function pipeStreamingResponse(
   onComplete: (fullText: string) => void,
   requestId?: string,
   gate?: StreamingGate | null,
+  onText?: (text: string) => boolean,
 ): Promise<void> {
   if (!upstreamResponse.body) {
     clientRes.end();
@@ -51,6 +57,7 @@ export async function pipeStreamingResponse(
   let accumulatedText = '';
   let buffer = '';
   let cleanFinish = false;
+  let aborted = false;
 
   try {
     while (true) {
@@ -62,13 +69,13 @@ export async function pipeStreamingResponse(
 
       const chunk = decoder.decode(value, { stream: true });
 
-      if (!gate) {
+      if (!gate && !onText) {
         clientRes.write(chunk);
         accumulateChunk(chunk);
         continue;
       }
 
-      // Line-mode forwarding: gate each completed data payload.
+      // Line-mode forwarding: run onText / gate on each completed data payload.
       buffer += chunk;
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
@@ -83,15 +90,26 @@ export async function pipeStreamingResponse(
         if (parsed.field === 'data') {
           if (parsed.value !== '[DONE]') {
             const text = provider.extractStreamingText(parsed.value);
-            if (text) accumulatedText += text;
+            if (text) {
+              accumulatedText += text;
+              if (onText && !onText(text)) {
+                aborted = true;
+                break;
+              }
+            }
           }
-          for (const payload of gate.process(parsed.value)) {
-            clientRes.write(`data: ${payload}\n\n`);
+          if (gate) {
+            for (const payload of gate.process(parsed.value)) {
+              clientRes.write(`data: ${payload}\n\n`);
+            }
+          } else {
+            clientRes.write(`data: ${parsed.value}\n\n`);
           }
         } else {
           writeLine(line);
         }
       }
+      if (aborted) break;
     }
   } catch (err) {
     logger.error(
@@ -103,7 +121,8 @@ export async function pipeStreamingResponse(
     // terminates every tool block it already saw (held blocks must not vanish).
     // End markers ([DONE] / message_stop) are held by the gate and only re-emitted
     // here, after the held payloads, when the upstream ended the stream cleanly.
-    if (gate) {
+    // On a canary abort NOTHING is flushed: the response is truncated deliberately.
+    if (gate && !aborted) {
       for (const payload of gate.flush()) {
         clientRes.write(`data: ${payload}\n\n`);
       }

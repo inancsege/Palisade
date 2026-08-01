@@ -16,6 +16,12 @@ import {
 import { pipeStreamingResponse } from './streaming.js';
 import { ResponseGate, type GateResult, type GateViolation } from './response-gate.js';
 import { createStreamingGate } from './streaming-gate.js';
+import {
+  CanaryStore,
+  CanaryTextScanner,
+  injectCanaryToken,
+  scanForCanary,
+} from './canary.js';
 import type { PatternMatch, VerdictAction } from '../types/verdict.js';
 import { logger } from '../utils/logger.js';
 
@@ -27,6 +33,7 @@ export class PalisadeProxy {
   private db: EventDatabase;
   private eventLogger: EventLogger | null = null;
   private responseGate: ResponseGate | null = null;
+  private canaryStore: CanaryStore;
 
   constructor(config: ProxyConfig, policy: PolicyConfig) {
     this.config = config;
@@ -35,6 +42,11 @@ export class PalisadeProxy {
     this.db = new EventDatabase(config.dbPath);
     // Tier 3 response-side gate is opt-in via detection.tier3.enabled (T3-06).
     this.responseGate = policy.detection.tier3.enabled ? new ResponseGate(policy) : null;
+    // Canary tokens are always generated; disabled stores simply return no token (T4-01).
+    this.canaryStore = new CanaryStore({
+      enabled: policy.detection.canary.enabled,
+      rotateIntervalSeconds: policy.detection.canary.rotate_interval,
+    });
   }
 
   async start(): Promise<void> {
@@ -165,6 +177,44 @@ export class PalisadeProxy {
     });
   }
 
+  /** T4-03: record a canary token hit (exfiltration evidence) as a canary_triggered event. */
+  private logCanaryEvent(
+    requestId: string,
+    token: string,
+    providerType: ProviderType,
+    req: IncomingMessage,
+    gate: 'streaming' | 'non-streaming',
+  ): void {
+    setImmediate(() => {
+      try {
+        this.eventLogger?.logEvent({
+          requestId,
+          eventType: 'canary_triggered',
+          provider: providerType,
+          actionTaken: 'block',
+          threatScore: 1,
+          matches: [{
+            patternId: 'canary-token',
+            description: 'Canary token detected in response content (possible data exfiltration)',
+            tier: 3,
+            category: 'exfiltration',
+            confidence: 1,
+            weight: 1,
+            matchedText: token,
+            offset: -1,
+            length: token.length,
+          }],
+          requestPath: req.url ?? null,
+          sourceIp: req.socket.remoteAddress ?? null,
+          policyFile: this.config.policyPath ?? null,
+          metadata: { gate },
+        });
+      } catch (logErr) {
+        logger.error({ err: logErr, requestId }, 'Failed to log canary trigger');
+      }
+    });
+  }
+
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const requestId = randomUUID();
     const startTime = performance.now();
@@ -184,12 +234,14 @@ export class PalisadeProxy {
     const { type: providerType, provider } = detectProvider(this.config.upstream, headers);
 
     let detectionResult: DetectionResult | null = null;
+    // Hoisted so canary injection (after detection) can reuse the parsed body.
+    let body: Record<string, unknown> | null = null;
 
     // Only scan if there's a body to scan (POST requests with JSON)
     if (rawBody.length > 0 && req.method === 'POST') {
       try {
-        const body = JSON.parse(rawBody.toString('utf-8'));
-        const extractedTexts = provider.extractTexts(body);
+        body = JSON.parse(rawBody.toString('utf-8'));
+        const extractedTexts = provider.extractTexts(body!);
 
         if (extractedTexts.length > 0) {
           detectionResult = await this.engine.detect(extractedTexts, requestId);
@@ -280,6 +332,17 @@ export class PalisadeProxy {
     forwardHeaders['content-length'] = String(rawBody.length);
     forwardHeaders['accept-encoding'] = 'identity'; // Request uncompressed responses from upstream
 
+    // T4-02: canary injection runs AFTER request-side scanning so the token never
+    // trips the pattern engine; the forwarded body carries the active token.
+    const canaryToken = this.canaryStore.currentToken();
+    if (canaryToken && body) {
+      const injected = injectCanaryToken(body, provider, canaryToken);
+      if (injected !== body) {
+        rawBody = Buffer.from(JSON.stringify(injected));
+        forwardHeaders['content-length'] = String(rawBody.length);
+      }
+    }
+
     let upstreamRes: Response;
     try {
       upstreamRes = await fetch(upstreamUrl, {
@@ -326,9 +389,22 @@ export class PalisadeProxy {
       const streamingGate = this.responseGate
         ? createStreamingGate(provider, this.responseGate)
         : null;
+      // T4-03: scan streamed text for the canary token before it reaches the client.
+      const canaryScanner = new CanaryTextScanner(this.canaryStore);
       await pipeStreamingResponse(upstreamRes, res, provider, (fullText) => {
         logger.debug({ requestId, streamedChars: fullText.length }, 'Streaming response complete');
-      }, requestId, streamingGate);
+      }, requestId, streamingGate, (text) => {
+        const hit = canaryScanner.push(text);
+        if (hit) {
+          this.logCanaryEvent(requestId, hit, providerType, req, 'streaming');
+          logger.warn(
+            { requestId, canaryToken: hit, gate: 'streaming' },
+            'Streaming response aborted: canary token in response content',
+          );
+          return false;
+        }
+        return true;
+      });
 
       if (streamingGate) {
         const summary = streamingGate.summary();
@@ -364,6 +440,32 @@ export class PalisadeProxy {
         } catch {
           // Unparseable or non-object body: pass through unchanged.
         }
+      }
+
+      // T4-03: a canary token in the response is exfiltration evidence — hard-block.
+      const canaryHit = scanForCanary(bodyToSend.toString('utf-8'), this.canaryStore);
+      if (canaryHit) {
+        this.logCanaryEvent(requestId, canaryHit, providerType, req, 'non-streaming');
+        const blocked: BlockedResponse = {
+          error: {
+            type: 'canary_detected',
+            message: 'Palisade blocked this response: canary token detected in response content (possible data exfiltration)',
+            verdict: 'block',
+            threatScore: 1,
+            requestId,
+          },
+        };
+        res.writeHead(403, {
+          'Content-Type': 'application/json',
+          'X-Palisade-Request-Id': requestId,
+          'X-Palisade-Gate-Action': 'block',
+        });
+        res.end(JSON.stringify(blocked));
+        logger.warn(
+          { requestId, canaryToken: canaryHit, gate: 'non-streaming' },
+          'Response hard-blocked: canary token in response content',
+        );
+        return;
       }
 
       res.writeHead(upstreamRes.status, responseHeaders);
