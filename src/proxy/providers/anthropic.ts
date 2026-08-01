@@ -1,5 +1,5 @@
 import type { LLMProvider } from './base.js';
-import type { ExtractedText } from '../../types/proxy.js';
+import type { ExtractedText, ToolCall } from '../../types/proxy.js';
 
 export class AnthropicProvider implements LLMProvider {
   static matches(upstream: string, headers: Record<string, string | string[] | undefined>): boolean {
@@ -49,6 +49,24 @@ export class AnthropicProvider implements LLMProvider {
     }
 
     return texts;
+  }
+
+  extractToolCalls(body: Record<string, unknown>): ToolCall[] {
+    const calls: ToolCall[] = [];
+    const content = body.content;
+    if (!Array.isArray(content)) return calls;
+
+    for (const block of content) {
+      if (!block || typeof block !== 'object' || !('type' in block)) continue;
+      const b = block as Record<string, unknown>;
+      if (b.type !== 'tool_use' || typeof b.name !== 'string') continue;
+      calls.push({
+        id: typeof b.id === 'string' ? b.id : undefined,
+        name: b.name,
+        arguments: b.input,
+      });
+    }
+    return calls;
   }
 
   extractStreamingText(data: string): string | null {

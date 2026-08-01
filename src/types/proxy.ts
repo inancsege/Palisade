@@ -8,6 +8,18 @@ export interface ExtractedText {
   text: string;
 }
 
+/**
+ * A tool call the model requested in a response. `arguments` is the parsed
+ * invocation payload (Anthropic `input` object; OpenAI parsed `arguments` JSON).
+ * When the JSON cannot be parsed (OpenAI), the raw string is preserved so the
+ * capability classifier can still inspect it.
+ */
+export interface ToolCall {
+  id?: string;
+  name: string;
+  arguments: unknown;
+}
+
 export interface ProxyRequest {
   requestId: string;
   provider: ProviderType;

@@ -1,5 +1,5 @@
 import type { LLMProvider } from './base.js';
-import type { ExtractedText } from '../../types/proxy.js';
+import type { ExtractedText, ToolCall } from '../../types/proxy.js';
 
 export class OpenAIProvider implements LLMProvider {
   static matches(upstream: string, headers: Record<string, string | string[] | undefined>): boolean {
@@ -54,6 +54,43 @@ export class OpenAIProvider implements LLMProvider {
     }
 
     return texts;
+  }
+
+  extractToolCalls(body: Record<string, unknown>): ToolCall[] {
+    const calls: ToolCall[] = [];
+    const choices = body.choices;
+    if (!Array.isArray(choices)) return calls;
+
+    for (const choice of choices) {
+      if (!choice || typeof choice !== 'object' || !('message' in choice)) continue;
+      const message = (choice as Record<string, unknown>).message as
+        | Record<string, unknown>
+        | undefined;
+      const toolCalls = message?.tool_calls;
+      if (!Array.isArray(toolCalls)) continue;
+
+      for (const tc of toolCalls) {
+        if (!tc || typeof tc !== 'object') continue;
+        const fn = (tc as Record<string, unknown>).function as
+          | Record<string, unknown>
+          | undefined;
+        if (!fn || typeof fn.name !== 'string') continue;
+
+        let args: unknown = fn.arguments;
+        if (typeof fn.arguments === 'string') {
+          try {
+            args = JSON.parse(fn.arguments);
+          } catch {
+            // Malformed JSON: keep the raw string so the classifier can still inspect it.
+            args = fn.arguments;
+          }
+        }
+
+        const id = (tc as Record<string, unknown>).id;
+        calls.push({ id: typeof id === 'string' ? id : undefined, name: fn.name, arguments: args });
+      }
+    }
+    return calls;
   }
 
   extractStreamingText(data: string): string | null {
