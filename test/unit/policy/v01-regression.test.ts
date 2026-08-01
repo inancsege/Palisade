@@ -48,6 +48,8 @@ describe('v0.1 policy backward-compat regression (fixtures/v01)', () => {
       expect(typeof merged!.detection.tier1.enabled).toBe('boolean');
       // Additive v0.2 fields are populated by mergePolicyWithDefaults even for a v0.1 file.
       expect(merged!.detection.tier2.ambiguous_band).toEqual([0.3, 0.7]);
+      // Additive v0.3 tier3 defaults are populated for a v0.1 file too (opt-in disabled).
+      expect(merged!.detection.tier3.enabled).toBe(false);
       expect(merged!.version).toBe('1');
     },
   );
