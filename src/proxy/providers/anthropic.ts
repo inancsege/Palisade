@@ -1,5 +1,72 @@
-import type { LLMProvider } from './base.js';
+import type { LLMProvider, StreamingToolCallAccumulator } from './base.js';
 import type { ExtractedText, ToolCall } from '../../types/proxy.js';
+
+interface PendingToolBlock {
+  id?: string;
+  name?: string;
+  startInput: unknown;
+  jsonFragments: string[];
+}
+
+function buildToolCall(pending: PendingToolBlock): ToolCall {
+  const concatenated = pending.jsonFragments.join('');
+  let args: unknown = pending.startInput;
+  if (concatenated.length > 0) {
+    try {
+      args = JSON.parse(concatenated);
+    } catch {
+      // Deltas are not valid JSON on their own (e.g. mid-stream abort): keep start input.
+    }
+  }
+  return { id: pending.id, name: pending.name ?? 'unknown', arguments: args };
+}
+
+/**
+ * Assembles Anthropic SSE tool_use blocks. `content_block_start` seeds the block,
+ * `input_json_delta` fragments concatenate into the input JSON, and the block is
+ * returned as a ToolCall at `content_block_stop`.
+ */
+export class AnthropicToolCallAccumulator implements StreamingToolCallAccumulator {
+  private pending = new Map<number, PendingToolBlock>();
+
+  ingest(event: unknown): ToolCall[] {
+    if (!event || typeof event !== 'object') return [];
+    const e = event as Record<string, unknown>;
+    const done: ToolCall[] = [];
+
+    if (e.type === 'content_block_start') {
+      const block = e.content_block as Record<string, unknown> | undefined;
+      if (block?.type === 'tool_use') {
+        const index = typeof e.index === 'number' ? e.index : 0;
+        this.pending.set(index, {
+          id: typeof block.id === 'string' ? block.id : undefined,
+          name: typeof block.name === 'string' ? block.name : undefined,
+          startInput: block.input,
+          jsonFragments: [],
+        });
+      }
+    } else if (e.type === 'input_json_delta') {
+      const pending = this.pending.get(e.index as number);
+      if (pending && typeof e.partial_json === 'string') {
+        pending.jsonFragments.push(e.partial_json);
+      }
+    } else if (e.type === 'content_block_stop') {
+      const pending = this.pending.get(e.index as number);
+      if (pending) {
+        this.pending.delete(e.index as number);
+        done.push(buildToolCall(pending));
+      }
+    }
+
+    return done;
+  }
+
+  finish(): ToolCall[] {
+    // Anthropic blocks only complete at content_block_stop; incomplete blocks
+    // (e.g. mid-stream abort) are dropped so partial tool calls never reach a client.
+    return [];
+  }
+}
 
 export class AnthropicProvider implements LLMProvider {
   static matches(upstream: string, headers: Record<string, string | string[] | undefined>): boolean {

@@ -1,5 +1,72 @@
-import type { LLMProvider } from './base.js';
+import type { LLMProvider, StreamingToolCallAccumulator } from './base.js';
 import type { ExtractedText, ToolCall } from '../../types/proxy.js';
+
+interface PendingOpenAIToolCall {
+  id?: string;
+  name?: string;
+  argsFragments: string[];
+}
+
+/**
+ * Assembles OpenAI SSE tool calls from incremental `delta.tool_calls` fragments
+ * (keyed by `index`). A call completes at `finish_reason: 'tool_calls'`.
+ */
+export class OpenAIToolCallAccumulator implements StreamingToolCallAccumulator {
+  private byIndex = new Map<number, PendingOpenAIToolCall>();
+
+  ingest(event: unknown): ToolCall[] {
+    if (!event || typeof event !== 'object') return [];
+    const choices = (event as Record<string, unknown>).choices;
+    if (!Array.isArray(choices)) return [];
+
+    const done: ToolCall[] = [];
+    for (const choice of choices) {
+      if (!choice || typeof choice !== 'object') continue;
+      const c = choice as Record<string, unknown>;
+      const delta = c.delta as Record<string, unknown> | undefined;
+      const toolCalls = delta?.tool_calls;
+      if (Array.isArray(toolCalls)) {
+        for (const tc of toolCalls) {
+          if (!tc || typeof tc !== 'object') continue;
+          const t = tc as Record<string, unknown>;
+          const index = typeof t.index === 'number' ? t.index : 0;
+          const fn = t.function as Record<string, unknown> | undefined;
+          const pending = this.byIndex.get(index) ?? { argsFragments: [] };
+          if (typeof t.id === 'string') pending.id = t.id;
+          if (fn && typeof fn.name === 'string') pending.name = fn.name;
+          if (fn && typeof fn.arguments === 'string') pending.argsFragments.push(fn.arguments);
+          this.byIndex.set(index, pending);
+        }
+      }
+      if (c.finish_reason === 'tool_calls') {
+        done.push(...this.flushAll());
+      }
+    }
+    return done;
+  }
+
+  finish(): ToolCall[] {
+    return this.flushAll();
+  }
+
+  private flushAll(): ToolCall[] {
+    const done: ToolCall[] = [];
+    for (const [index, pending] of this.byIndex) {
+      const argsText = pending.argsFragments.join('');
+      let args: unknown = argsText;
+      if (argsText.length > 0) {
+        try {
+          args = JSON.parse(argsText);
+        } catch {
+          // Keep the raw concatenated string when fragments are not valid JSON.
+        }
+      }
+      done.push({ id: pending.id, name: pending.name ?? 'unknown', arguments: args });
+      this.byIndex.delete(index);
+    }
+    return done;
+  }
+}
 
 export class OpenAIProvider implements LLMProvider {
   static matches(upstream: string, headers: Record<string, string | string[] | undefined>): boolean {

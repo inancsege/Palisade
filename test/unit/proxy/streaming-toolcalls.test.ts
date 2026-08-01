@@ -78,7 +78,7 @@ describe('OpenAIToolCallAccumulator (streaming, T3-03)', () => {
       acc.ingest({
         choices: [
           {
-            delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'search', arguments: '{"query": ' } }] },
+            delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'search', arguments: '{"query": "' } }] },
           },
         ],
       }),
