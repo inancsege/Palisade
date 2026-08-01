@@ -8,6 +8,7 @@ export type EventType =
   | 'request_warned'
   | 'policy_violation'
   | 'canary_triggered'
+  | 'anomaly_detected'
   | 'scan_completed';
 
 export interface EventRecord {

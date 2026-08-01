@@ -51,7 +51,9 @@ export class Tier3Engine {
     const matches: PatternMatch[] = [];
     const violatedTools = new Set<string>();
     const blockedCalls: BlockedCall[] = [];
-    const egressHosts = new Set<string>();
+    // Call-level (NOT deduped): the anomaly tracker counts egress ATTEMPTS, so five
+    // calls to the same host must yield five entries (T4-04).
+    const egressHosts: string[] = [];
     // Severity is the stricter of the capability action and the unknown-tool action.
     let severity = 0;
 
@@ -69,7 +71,7 @@ export class Tier3Engine {
         severity = Math.max(severity, SEVERITY[config.unknown_tool]);
         continue;
       }
-      for (const host of verdict.egressHosts) egressHosts.add(host);
+      egressHosts.push(...verdict.egressHosts);
       if (!verdict.allowed) {
         for (const v of verdict.violations) {
           matches.push(this.makeMatch(v.capability, `capability.${v.capability}`, v.detail, v.value));
@@ -87,7 +89,7 @@ export class Tier3Engine {
       toolCount: calls.length,
       violatedTools: [...violatedTools],
       blockedCalls,
-      egressHosts: [...egressHosts],
+      egressHosts,
     };
   }
 

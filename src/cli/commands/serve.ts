@@ -1,11 +1,11 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { PalisadeProxy, checkUnimplementedFeatures } from '../../proxy/server.js';
+import { PalisadeProxy } from '../../proxy/server.js';
 import { loadPolicy } from '../../policy/loader.js';
 import { defaultPolicy } from '../../policy/defaults.js';
 import { resolveProxyConfig } from '../../utils/config.js';
 import { createLogger } from '../../utils/logger.js';
-import { printBanner, printStartup, printFeatureWarnings } from '../output.js';
+import { printBanner, printStartup } from '../output.js';
 
 /**
  * Map a thrown startup error to a structured operator-facing shape (T2-09). Returns a non-null
@@ -53,8 +53,6 @@ export const serveCommand = new Command('serve')
       }
     }
 
-    const featureWarnings = checkUnimplementedFeatures(policy, log);
-
     const proxy = new PalisadeProxy(config, policy);
 
     // Graceful shutdown
@@ -70,7 +68,6 @@ export const serveCommand = new Command('serve')
     try {
       await proxy.start();
       printStartup(config.port, config.host, config.upstream, config.policyPath);
-      printFeatureWarnings(featureWarnings);
     } catch (err) {
       // T2-09: a tier2_model_missing fast-fail surfaces a structured error.type + a one-line
       // `palisade tier2 install` remediation and exits fast (within 2s, no network attempt —

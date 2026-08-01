@@ -22,6 +22,7 @@ import {
   injectCanaryToken,
   scanForCanary,
 } from './canary.js';
+import { EgressAnomalyTracker } from './egress-anomaly.js';
 import type { PatternMatch, VerdictAction } from '../types/verdict.js';
 import { logger } from '../utils/logger.js';
 
@@ -34,6 +35,7 @@ export class PalisadeProxy {
   private eventLogger: EventLogger | null = null;
   private responseGate: ResponseGate | null = null;
   private canaryStore: CanaryStore;
+  private egressTracker: EgressAnomalyTracker;
 
   constructor(config: ProxyConfig, policy: PolicyConfig) {
     this.config = config;
@@ -47,6 +49,8 @@ export class PalisadeProxy {
       enabled: policy.detection.canary.enabled,
       rotateIntervalSeconds: policy.detection.canary.rotate_interval,
     });
+    // Cross-request egress anomaly tracking (T4-04) — fed from Tier 3 gate evaluations.
+    this.egressTracker = new EgressAnomalyTracker();
   }
 
   async start(): Promise<void> {
@@ -175,6 +179,42 @@ export class PalisadeProxy {
         logger.error({ err: logErr, requestId }, 'Failed to log policy violation');
       }
     });
+  }
+
+  /** T4-04: feed the egress anomaly tracker and log any anomalies as events. */
+  private recordEgressHosts(
+    requestId: string,
+    sourceIp: string | null,
+    hosts: string[],
+    providerType: ProviderType,
+    req: IncomingMessage,
+  ): void {
+    if (hosts.length === 0 || !sourceIp) return;
+    for (const host of hosts) {
+      for (const anomaly of this.egressTracker.recordEgress(sourceIp, host)) {
+        setImmediate(() => {
+          try {
+            this.eventLogger?.logEvent({
+              requestId,
+              eventType: 'anomaly_detected',
+              provider: providerType,
+              actionTaken: 'warn',
+              threatScore: 0,
+              requestPath: req.url ?? null,
+              sourceIp,
+              policyFile: this.config.policyPath ?? null,
+              metadata: { anomaly: anomaly.kind, host: anomaly.host, count: anomaly.count },
+            });
+          } catch (logErr) {
+            logger.error({ err: logErr, requestId }, 'Failed to log egress anomaly');
+          }
+        });
+        logger.warn(
+          { requestId, sourceIp, anomaly: anomaly.kind, host: anomaly.host, count: anomaly.count },
+          `Egress anomaly detected: ${anomaly.kind}`,
+        );
+      }
+    }
   }
 
   /** T4-03: record a canary token hit (exfiltration evidence) as a canary_triggered event. */
@@ -408,6 +448,7 @@ export class PalisadeProxy {
 
       if (streamingGate) {
         const summary = streamingGate.summary();
+        this.recordEgressHosts(requestId, req.socket.remoteAddress ?? null, summary.egressHosts, providerType, req);
         if (summary.matches.length > 0) {
           this.logGateEvent(requestId, summary.action, summary.matches, summary.threatScore, summary.violations, providerType, req, 'streaming');
           logger.warn(
@@ -425,6 +466,7 @@ export class PalisadeProxy {
         try {
           const parsed = JSON.parse(responseBody.toString('utf-8'));
           const gateResult = this.responseGate.gateNonStreaming(parsed, provider);
+          this.recordEgressHosts(requestId, req.socket.remoteAddress ?? null, gateResult.egressHosts, providerType, req);
           if (gateResult.action !== 'allow') {
             this.applyGateResult(res, responseHeaders, gateResult, requestId, providerType, req);
             if (gateResult.hardBlock) return;
@@ -475,24 +517,4 @@ export class PalisadeProxy {
     const elapsed = performance.now() - startTime;
     logger.debug({ requestId, elapsed: elapsed.toFixed(2), verdict: detectionResult?.action ?? 'passthrough' }, 'Request handled');
   }
-}
-
-export function checkUnimplementedFeatures(
-  policy: PolicyConfig,
-  log: { warn: (obj: Record<string, unknown>, msg: string) => void },
-): string[] {
-  const warnings: string[] = [];
-
-  // Tier 2 ML detection is implemented as of v0.2 (Phase 2). When enabled but the model is not
-  // installed, Tier2Engine.initialize() fast-fails with `tier2_model_missing` (see serve.ts) — that
-  // is the correct operator signal, NOT a "not implemented" warning. So tier2 is intentionally not
-  // listed here. Canary token detection remains unimplemented.
-
-  if (policy.detection.canary.enabled) {
-    const msg = 'canary.enabled is set but canary token detection is not yet implemented (planned for v2)';
-    log.warn({ feature: 'canary' }, msg);
-    warnings.push(msg);
-  }
-
-  return warnings;
 }

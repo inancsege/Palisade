@@ -40,9 +40,9 @@ A fine-tuned DeBERTa classifier that scores the input from 0.0 (safe) to 1.0 (in
 **Tier 3 — Behavioral Policy Engine**
 Every tool call in an LLM response is classified against the policy's per-tool capability manifests (`network_egress`, `filesystem`, `shell_exec`) — a weather tool calling `curl` to an undeclared IP gets blocked, a document summarizer attempting to write to `~/.ssh/` gets blocked, a skill reading `.env` when its manifest declares no filesystem access gets blocked. Configurable `block` / `warn` actions; hard 403 (optionally with response rewrite) for non-streaming responses, and hold-back gating for streaming (SSE) responses — text deltas flow while tool_use blocks are held until they can be evaluated and replaced or passed through.
 
-### Canary Tokens (planned — not yet implemented)
+### Canary Tokens & Exfiltration Detection (v0.4)
 
-Palisade injects traceable markers into sensitive context (credentials, user data). If these markers appear in outbound network traffic or tool outputs directed to undeclared endpoints, the source skill/tool is immediately flagged and quarantined.
+Palisade injects a rotating, deployment-wide canary token into every request's system prompt (opt-in via `detection.canary.enabled`). A token appearing in a response is evidence of data exfiltration: non-streaming responses are hard-blocked with 403, streaming responses are aborted before the token-bearing content reaches the client, and every hit is recorded as a `canary_triggered` event. Tokens rotate on `rotate_interval` (with a 15-minute grace window for in-flight requests). A companion egress anomaly tracker watches Tier 3 gate results per source IP — bursts of calls to the same host or floods of newly-seen hosts fire `anomaly_detected` events (fixed thresholds: 5 same-host calls or 5 distinct hosts per 60s).
 
 ## Supported Frameworks
 
@@ -133,7 +133,7 @@ Palisade is **not** a replacement for infrastructure sandboxing. Use it _alongsi
 - [x] **v0.1** — Tier 1 pattern engine + proxy mode + CLI (`palisade serve`, `palisade scan`)
 - [x] **v0.2** — Tier 2 ML classifier (ONNX, CPU-only) wired into the cascade; benchmark suite in progress
 - [x] **v0.3** — Tier 3 behavioral policy engine (YAML capability manifests) + response-side action gate
-- [ ] **v0.4** — Canary token injection + exfiltration anomaly detection
+- [x] **v0.4** — Canary token injection + exfiltration anomaly detection
 - [ ] **v0.5** — Dashboard + event log + skill trust scoring
 - [ ] **v1.0** — Framework adapters (OpenClaw, LangGraph, CrewAI, Vercel AI SDK)
 
