@@ -34,30 +34,20 @@ describe('checkUnimplementedFeatures', () => {
     expect(mockLog.warn).not.toHaveBeenCalled();
   });
 
-  it('should warn when canary.enabled is true', () => {
+  it('should NOT warn when canary.enabled is true (canary detection ships in v0.4)', () => {
     const mockLog = { warn: vi.fn() };
     const warnings = checkUnimplementedFeatures(policyWith({ canaryEnabled: true }), mockLog);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('canary');
-    expect(mockLog.warn).toHaveBeenCalledOnce();
-    expect(mockLog.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ feature: 'canary' }),
-      expect.stringContaining('canary'),
-    );
+    expect(warnings).toEqual([]);
+    expect(mockLog.warn).not.toHaveBeenCalled();
   });
 
-  it('should warn only for canary when both tier2 and canary are enabled (tier2 is implemented)', () => {
+  it('should return empty when both tier2 and canary are enabled (both implemented)', () => {
     const mockLog = { warn: vi.fn() };
     const warnings = checkUnimplementedFeatures(
       policyWith({ tier2Enabled: true, canaryEnabled: true }),
       mockLog,
     );
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('canary');
-    expect(mockLog.warn).toHaveBeenCalledOnce();
-    expect(mockLog.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ feature: 'canary' }),
-      expect.stringContaining('canary'),
-    );
+    expect(warnings).toEqual([]);
+    expect(mockLog.warn).not.toHaveBeenCalled();
   });
 });
