@@ -69,6 +69,9 @@ describe('Tier3Engine.evaluate (T3-05)', () => {
     expect(m.matchedText).toBe('evil.example.com');
     expect(m.patternId).toBe('capability.network_egress');
     expect(r.violatedTools).toEqual(['weather-lookup']);
+    expect(r.blockedCalls).toHaveLength(1);
+    expect(r.blockedCalls[0].call.name).toBe('weather-lookup');
+    expect(r.blockedCalls[0].capabilities).toEqual(['network_egress']);
   });
 
   it('collects violations across multiple tools and capabilities', () => {
@@ -89,6 +92,7 @@ describe('Tier3Engine.evaluate (T3-05)', () => {
     expect(r.matches.map((m) => m.category).sort()).toEqual(['network_egress', 'shell_exec']);
     expect(r.violatedTools).toEqual(['code-runner', 'fetch']);
     expect(r.toolCount).toBe(3);
+    expect(r.blockedCalls.map((b) => b.call.name)).toEqual(['code-runner', 'fetch']);
   });
 
   it('honors a warn policy action', () => {

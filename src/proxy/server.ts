@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import type { ProxyConfig, BlockedResponse } from '../types/proxy.js';
+import type { ProxyConfig, BlockedResponse, ProviderType } from '../types/proxy.js';
 import type { PolicyConfig } from '../types/policy.js';
 import type { DetectionResult } from '../types/verdict.js';
 import { DetectionEngine } from '../detection/engine.js';
@@ -14,6 +14,7 @@ import {
   isStreamingResponse,
 } from './interceptor.js';
 import { pipeStreamingResponse } from './streaming.js';
+import { ResponseGate, type GateResult } from './response-gate.js';
 import { logger } from '../utils/logger.js';
 
 export class PalisadeProxy {
@@ -23,12 +24,15 @@ export class PalisadeProxy {
   private engine: DetectionEngine;
   private db: EventDatabase;
   private eventLogger: EventLogger | null = null;
+  private responseGate: ResponseGate | null = null;
 
   constructor(config: ProxyConfig, policy: PolicyConfig) {
     this.config = config;
     this.policy = policy;
     this.engine = new DetectionEngine(policy.detection);
     this.db = new EventDatabase(config.dbPath);
+    // Tier 3 response-side gate is opt-in via detection.tier3.enabled (T3-06).
+    this.responseGate = policy.detection.tier3.enabled ? new ResponseGate(policy) : null;
   }
 
   async start(): Promise<void> {
@@ -76,6 +80,73 @@ export class PalisadeProxy {
         resolve();
       }
     });
+  }
+
+  /**
+   * Apply a Tier 3 gate verdict to an in-flight non-streaming response:
+   * adds violation headers, logs the event, and hard-blocks when configured.
+   */
+  private applyGateResult(
+    res: ServerResponse,
+    responseHeaders: Record<string, string>,
+    gateResult: GateResult,
+    requestId: string,
+    providerType: ProviderType,
+    req: IncomingMessage,
+  ): void {
+    responseHeaders['x-palisade-gate-action'] = gateResult.action;
+    responseHeaders['x-palisade-policy-violation'] = gateResult.matches
+      .map((m) => m.patternId)
+      .join(',');
+
+    setImmediate(() => {
+      try {
+        this.eventLogger?.logEvent({
+          requestId,
+          eventType: 'policy_violation',
+          provider: providerType,
+          actionTaken: gateResult.action,
+          threatScore: gateResult.threatScore,
+          matches: gateResult.matches,
+          requestPath: req.url ?? null,
+          sourceIp: req.socket.remoteAddress ?? null,
+          policyFile: this.config.policyPath ?? null,
+          metadata: {
+            gate: 'non-streaming',
+            tools: gateResult.violations.map((v) => v.tool),
+          },
+        });
+      } catch (logErr) {
+        logger.error({ err: logErr, requestId }, 'Failed to log policy violation');
+      }
+    });
+
+    if (gateResult.hardBlock) {
+      const blocked: BlockedResponse = {
+        error: {
+          type: 'policy_violation',
+          message: `Palisade blocked the response: ${gateResult.violations.length} policy violation(s) in tool call(s): ${gateResult.violations.map((v) => v.tool).join(', ')}`,
+          verdict: 'block',
+          threatScore: gateResult.threatScore,
+          requestId,
+        },
+      };
+      res.writeHead(403, {
+        'Content-Type': 'application/json',
+        'X-Palisade-Request-Id': requestId,
+        'X-Palisade-Gate-Action': 'block',
+      });
+      res.end(JSON.stringify(blocked));
+      logger.warn(
+        { requestId, violations: gateResult.violations.length, threatScore: gateResult.threatScore },
+        'Response hard-blocked by policy gate',
+      );
+    } else {
+      logger.warn(
+        { requestId, violations: gateResult.violations.length, threatScore: gateResult.threatScore, modified: gateResult.modified },
+        'Response gated by policy',
+      );
+    }
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -240,8 +311,27 @@ export class PalisadeProxy {
       }, requestId);
     } else {
       const responseBody = Buffer.from(await upstreamRes.arrayBuffer());
+      let bodyToSend = responseBody;
+
+      // T3-06: response-side action gate for non-streaming JSON responses.
+      if (this.responseGate && (responseHeaders['content-type'] ?? '').includes('application/json')) {
+        try {
+          const parsed = JSON.parse(responseBody.toString('utf-8'));
+          const gateResult = this.responseGate.gateNonStreaming(parsed, provider);
+          if (gateResult.action !== 'allow') {
+            this.applyGateResult(res, responseHeaders, gateResult, requestId, providerType, req);
+            if (gateResult.hardBlock) return;
+            if (gateResult.modified && gateResult.body) {
+              bodyToSend = Buffer.from(JSON.stringify(gateResult.body));
+            }
+          }
+        } catch {
+          // Unparseable or non-object body: pass through unchanged.
+        }
+      }
+
       res.writeHead(upstreamRes.status, responseHeaders);
-      res.end(responseBody);
+      res.end(bodyToSend);
     }
 
     const elapsed = performance.now() - startTime;

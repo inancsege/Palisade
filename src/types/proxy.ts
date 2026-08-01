@@ -54,7 +54,7 @@ export interface ProxyConfig {
 
 export interface BlockedResponse {
   error: {
-    type: 'prompt_injection_detected' | 'unparseable_body';
+    type: 'prompt_injection_detected' | 'unparseable_body' | 'policy_violation';
     message: string;
     verdict: VerdictAction;
     threatScore: number;

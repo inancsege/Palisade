@@ -7,6 +7,11 @@ import {
   type EffectiveCapabilities,
 } from './classifier.js';
 
+export interface BlockedCall {
+  call: ToolCall;
+  capabilities: string[];
+}
+
 export interface Tier3Evaluation {
   /** True when Tier 3 ran (enabled) and had tool calls to evaluate. */
   consulted: boolean;
@@ -14,6 +19,8 @@ export interface Tier3Evaluation {
   matches: PatternMatch[];
   toolCount: number;
   violatedTools: string[];
+  /** The offending calls, for precise response rewriting by the gate. */
+  blockedCalls: BlockedCall[];
 }
 
 const SEVERITY = { allow: 0, warn: 1, block: 2 } as const;
@@ -33,11 +40,12 @@ export class Tier3Engine {
   evaluate(calls: ToolCall[]): Tier3Evaluation {
     const config = this.policy.detection.tier3;
     if (!config.enabled || calls.length === 0) {
-      return { consulted: config.enabled && calls.length > 0, action: 'allow', matches: [], toolCount: calls.length, violatedTools: [] };
+      return { consulted: config.enabled && calls.length > 0, action: 'allow', matches: [], toolCount: calls.length, violatedTools: [], blockedCalls: [] };
     }
 
     const matches: PatternMatch[] = [];
     const violatedTools = new Set<string>();
+    const blockedCalls: BlockedCall[] = [];
     // Severity is the stricter of the capability action and the unknown-tool action.
     let severity = 0;
 
@@ -51,6 +59,7 @@ export class Tier3Engine {
         matches.push(this.makeMatch('custom', 'capability.unknown_tool',
           `tool '${call.name}' is not covered by any capability manifest`, call.name));
         violatedTools.add(call.name);
+        blockedCalls.push({ call, capabilities: ['unknown_tool'] });
         severity = Math.max(severity, SEVERITY[config.unknown_tool]);
         continue;
       }
@@ -59,6 +68,7 @@ export class Tier3Engine {
           matches.push(this.makeMatch(v.capability, `capability.${v.capability}`, v.detail, v.value));
         }
         violatedTools.add(call.name);
+        blockedCalls.push({ call, capabilities: [...new Set(verdict.violations.map((v) => v.capability))] });
         severity = Math.max(severity, SEVERITY[config.action]);
       }
     }
@@ -69,6 +79,7 @@ export class Tier3Engine {
       matches,
       toolCount: calls.length,
       violatedTools: [...violatedTools],
+      blockedCalls,
     };
   }
 
