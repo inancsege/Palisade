@@ -66,11 +66,17 @@ function textBlockPayloads(index: number, text: string): string[] {
   ];
 }
 
+function stopPayload(index: number): string {
+  return JSON.stringify({ type: 'content_block_stop', index });
+}
+
 class AnthropicStreamingGate implements StreamingGate {
   private held = new Map<number, HeldAnthropicBlock>();
   private matches: PatternMatch[] = [];
   private violations: GateViolation[] = [];
   private worstSeverity = 0;
+  private sawEnd = false;
+  private endPayload: string | null = null;
 
   constructor(private responseGate: ResponseGate) {}
 
@@ -79,6 +85,14 @@ class AnthropicStreamingGate implements StreamingGate {
     if (!event || typeof event !== 'object') return [dataPayload];
     const e = event as Record<string, unknown>;
     const index = typeof e.index === 'number' ? e.index : 0;
+
+    if (e.type === 'message_stop') {
+      // Hold the end marker until flush: any blocks still held at the end of the
+      // stream must be resolved (and terminated) BEFORE the client sees message_stop.
+      this.sawEnd = true;
+      this.endPayload = dataPayload;
+      return [];
+    }
 
     if (e.type === 'content_block_start') {
       const block = e.content_block as Record<string, unknown> | undefined;
@@ -117,10 +131,14 @@ class AnthropicStreamingGate implements StreamingGate {
     return [dataPayload];
   }
 
-  private resolveBlock(held: HeldAnthropicBlock): string[] {
+  private resolveBlock(held: HeldAnthropicBlock, withStop = false): string[] {
     const call = buildHeldCall(held);
     const evaluation = this.responseGate.evaluateCalls([call]);
-    if (evaluation.action === 'allow') return held.payloads;
+    if (evaluation.action === 'allow') {
+      // The real content_block_stop is already in held.payloads when the block
+      // completed normally; `withStop` synthesizes one for truncated streams.
+      return withStop ? [...held.payloads, stopPayload(held.index)] : held.payloads;
+    }
 
     this.record(evaluation);
     if (evaluation.action === 'block') {
@@ -128,7 +146,7 @@ class AnthropicStreamingGate implements StreamingGate {
       return textBlockPayloads(held.index, blockNotice(evaluation.blockedCalls));
     }
     // warn: log-only, the block still flows through.
-    return held.payloads;
+    return withStop ? [...held.payloads, stopPayload(held.index)] : held.payloads;
   }
 
   private record(evaluation: ReturnType<ResponseGate['evaluateCalls']>): void {
@@ -143,8 +161,9 @@ class AnthropicStreamingGate implements StreamingGate {
     const emitted: string[] = [];
     for (const held of [...this.held.values()]) {
       this.held.delete(held.index);
-      emitted.push(...this.resolveBlock(held));
+      emitted.push(...this.resolveBlock(held, true));
     }
+    if (this.sawEnd && this.endPayload) emitted.push(this.endPayload);
     return emitted;
   }
 
@@ -159,7 +178,6 @@ class AnthropicStreamingGate implements StreamingGate {
 }
 
 interface HeldOpenAICall {
-  payloads: string[];
   id?: string;
   name?: string;
   argsFragments: string[];
@@ -172,10 +190,17 @@ class OpenAIStreamingGate implements StreamingGate {
   private matches: PatternMatch[] = [];
   private violations: GateViolation[] = [];
   private worstSeverity = 0;
+  private sawEnd = false;
 
   constructor(private responseGate: ResponseGate) {}
 
   process(dataPayload: string): string[] {
+    if (dataPayload === '[DONE]') {
+      // Hold the end marker until flush so held calls are emitted BEFORE it.
+      this.sawEnd = true;
+      return [];
+    }
+
     const event = parseJson(dataPayload);
     if (!event || typeof event !== 'object') return [dataPayload];
     const choices = (event as Record<string, unknown>).choices;
@@ -194,7 +219,7 @@ class OpenAIStreamingGate implements StreamingGate {
         const t = tc as Record<string, unknown>;
         const index = typeof t.index === 'number' ? t.index : 0;
         const fn = t.function as Record<string, unknown> | undefined;
-        const held = this.byIndex.get(index) ?? { payloads: [], argsFragments: [] };
+        const held = this.byIndex.get(index) ?? { argsFragments: [] };
         if (typeof t.id === 'string') held.id = t.id;
         if (fn && typeof fn.name === 'string') held.name = fn.name;
         if (fn && typeof fn.arguments === 'string') held.argsFragments.push(fn.arguments);
@@ -204,6 +229,10 @@ class OpenAIStreamingGate implements StreamingGate {
     }
 
     if (choice.finish_reason === 'tool_calls') {
+      if (this.byIndex.size === 0 && this.chunks.length === 0) {
+        // Everything was already resolved by an earlier finish chunk: pass through.
+        return [dataPayload];
+      }
       return this.resolveAll();
     }
 
@@ -255,9 +284,13 @@ class OpenAIStreamingGate implements StreamingGate {
   }
 
   flush(): string[] {
-    if (this.byIndex.size === 0) return [];
-    // Clean stream end without an explicit finish_reason: resolve held calls.
-    return this.resolveAll();
+    const emitted: string[] = [];
+    if (this.byIndex.size > 0 || this.chunks.length > 0) {
+      // Clean end without an explicit finish_reason: resolve held calls now.
+      emitted.push(...this.resolveAll());
+    }
+    if (this.sawEnd) emitted.push('[DONE]');
+    return emitted;
   }
 
   summary(): StreamingGateSummary {

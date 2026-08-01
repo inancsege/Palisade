@@ -10,6 +10,7 @@ vi.mock('../../../src/utils/logger.js', () => ({
 }));
 
 import { pipeStreamingResponse } from '../../../src/proxy/streaming.js';
+import type { StreamingGate } from '../../../src/proxy/streaming-gate.js';
 import { logger } from '../../../src/utils/logger.js';
 import type { ServerResponse } from 'node:http';
 import type { LLMProvider } from '../../../src/proxy/providers/base.js';
@@ -85,5 +86,23 @@ describe('SECF-03/SECF-04: Error visibility in streaming', () => {
     expect(logger.error).toHaveBeenCalled();
     const context = (logger.error as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(context.requestId).toBe('my-request-123');
+  });
+
+  it('flushes the gate on a stream error so held tool blocks still terminate', async () => {
+    const failingRes = createFailingResponse();
+    const mockRes = createMockServerResponse();
+    const mockProvider = createMockProvider();
+    const onComplete = vi.fn();
+    const gate: StreamingGate = {
+      process: vi.fn().mockReturnValue([]),
+      flush: vi.fn().mockReturnValue(['{"type":"content_block_stop","index":0}']),
+      summary: vi.fn().mockReturnValue({ action: 'allow', matches: [], violations: [], threatScore: 0 }),
+    };
+
+    await pipeStreamingResponse(failingRes, mockRes, mockProvider, onComplete, 'test-req-id', gate);
+
+    expect(gate.flush).toHaveBeenCalledTimes(1);
+    expect(mockRes.write).toHaveBeenCalledWith('data: {"type":"content_block_stop","index":0}\n\n');
+    expect(mockRes.end).toHaveBeenCalledTimes(1);
   });
 });

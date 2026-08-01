@@ -99,7 +99,11 @@ export async function pipeStreamingResponse(
       'Error during streaming response piping',
     );
   } finally {
-    if (gate && cleanFinish) {
+    // Always flush held payloads — also on error — so the client's SSE stream
+    // terminates every tool block it already saw (held blocks must not vanish).
+    // End markers ([DONE] / message_stop) are held by the gate and only re-emitted
+    // here, after the held payloads, when the upstream ended the stream cleanly.
+    if (gate) {
       for (const payload of gate.flush()) {
         clientRes.write(`data: ${payload}\n\n`);
       }

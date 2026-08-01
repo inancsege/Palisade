@@ -457,4 +457,46 @@ describe('Tier 3 response gate — streaming hold-back (T3-07)', () => {
       );
     });
   });
+
+  describe('truncated streams (T3-07 regression)', () => {
+    it('Anthropic: a stream that ends before content_block_stop still terminates the held block', async () => {
+      const chunks = [
+        { data: JSON.stringify({ type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: 'test' } }) },
+        {
+          data: JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_ok', name: 'weather-lookup', input: {} } }),
+        },
+        { data: JSON.stringify({ type: 'input_json_delta', index: 0, partial_json: '{"url": "https://api.openweathermap.org/x"}' }) },
+      ];
+      await withStreamingProxy(tier3Policy(), chunks, async (port) => {
+        const res = await sendRequest({ port, body: { model: 'x', messages: [{ role: 'user', content: 'hi' }] } });
+        const body = await res.text();
+        expect(body).toContain('toolu_ok');
+        expect(body).toContain('input_json_delta');
+        expect(body).toContain('"type":"content_block_stop"');
+      });
+    });
+
+    it('OpenAI: a stream that ends without finish_reason emits held calls BEFORE [DONE]', async () => {
+      const chunks = [
+        {
+          data: JSON.stringify({
+            id: 'chatcmpl-1',
+            choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call_2', type: 'function', function: { name: 'weather-lookup', arguments: '{"url": "https://api.openweathermap.org/x"}' } }] } }],
+          }),
+        },
+      ];
+      await withStreamingProxy(tier3Policy(), chunks, async (port) => {
+        const res = await sendRequest({
+          port,
+          path: '/v1/chat/completions',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sk-test-fake' },
+          body: { model: 'gpt-4', messages: [{ role: 'user', content: 'hi' }] },
+        });
+        const body = await res.text();
+        expect(body).toContain('call_2');
+        expect(body.indexOf('call_2')).toBeLessThan(body.indexOf('[DONE]'));
+        expect(body.indexOf('"finish_reason":"tool_calls"')).toBeLessThan(body.indexOf('[DONE]'));
+      });
+    });
+  });
 });

