@@ -1,5 +1,6 @@
 import type { ServerResponse } from 'node:http';
 import type { LLMProvider } from './providers/base.js';
+import type { StreamingGate } from './streaming-gate.js';
 import { logger } from '../utils/logger.js';
 
 export interface SSEEvent {
@@ -20,6 +21,10 @@ export function parseSSELine(line: string): { field: string; value: string } | n
 /**
  * Pipe a streaming SSE response from upstream to the client,
  * accumulating text content for post-hoc logging.
+ *
+ * When `gate` is provided, the stream is forwarded line-by-line so held events
+ * (tool_use blocks) can be withheld and rewritten; without a gate the response is
+ * piped chunk-by-chunk, byte-identical to the upstream.
  */
 export async function pipeStreamingResponse(
   upstreamResponse: Response,
@@ -27,6 +32,7 @@ export async function pipeStreamingResponse(
   provider: LLMProvider,
   onComplete: (fullText: string) => void,
   requestId?: string,
+  gate?: StreamingGate | null,
 ): Promise<void> {
   if (!upstreamResponse.body) {
     clientRes.end();
@@ -44,25 +50,46 @@ export async function pipeStreamingResponse(
   const decoder = new TextDecoder();
   let accumulatedText = '';
   let buffer = '';
+  let cleanFinish = false;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        cleanFinish = true;
+        break;
+      }
 
       const chunk = decoder.decode(value, { stream: true });
-      clientRes.write(chunk);
 
-      // Parse SSE events from the chunk to extract text
+      if (!gate) {
+        clientRes.write(chunk);
+        accumulateChunk(chunk);
+        continue;
+      }
+
+      // Line-mode forwarding: gate each completed data payload.
       buffer += chunk;
       const lines = buffer.split('\n');
-      buffer = lines.pop() ?? ''; // keep incomplete line in buffer
+      buffer = lines.pop() ?? '';
 
       for (const line of lines) {
+        const writeLine = (l: string) => clientRes.write(l + '\n');
         const parsed = parseSSELine(line);
-        if (parsed?.field === 'data' && parsed.value !== '[DONE]') {
-          const text = provider.extractStreamingText(parsed.value);
-          if (text) accumulatedText += text;
+        if (!parsed) {
+          writeLine(line);
+          continue;
+        }
+        if (parsed.field === 'data') {
+          if (parsed.value !== '[DONE]') {
+            const text = provider.extractStreamingText(parsed.value);
+            if (text) accumulatedText += text;
+          }
+          for (const payload of gate.process(parsed.value)) {
+            clientRes.write(`data: ${payload}\n\n`);
+          }
+        } else {
+          writeLine(line);
         }
       }
     }
@@ -72,7 +99,29 @@ export async function pipeStreamingResponse(
       'Error during streaming response piping',
     );
   } finally {
+    if (gate && cleanFinish) {
+      for (const payload of gate.flush()) {
+        clientRes.write(`data: ${payload}\n\n`);
+      }
+    }
+    if (gate && buffer.length > 0 && cleanFinish) {
+      // Trailing incomplete line after the final chunk.
+      clientRes.write(buffer + '\n');
+    }
     clientRes.end();
     onComplete(accumulatedText);
+  }
+
+  function accumulateChunk(chunk: string): void {
+    buffer += chunk;
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const parsed = parseSSELine(line);
+      if (parsed?.field === 'data' && parsed.value !== '[DONE]') {
+        const text = provider.extractStreamingText(parsed.value);
+        if (text) accumulatedText += text;
+      }
+    }
   }
 }

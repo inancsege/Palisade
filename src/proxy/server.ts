@@ -14,7 +14,9 @@ import {
   isStreamingResponse,
 } from './interceptor.js';
 import { pipeStreamingResponse } from './streaming.js';
-import { ResponseGate, type GateResult } from './response-gate.js';
+import { ResponseGate, type GateResult, type GateViolation } from './response-gate.js';
+import { createStreamingGate } from './streaming-gate.js';
+import type { PatternMatch, VerdictAction } from '../types/verdict.js';
 import { logger } from '../utils/logger.js';
 
 export class PalisadeProxy {
@@ -99,27 +101,7 @@ export class PalisadeProxy {
       .map((m) => m.patternId)
       .join(',');
 
-    setImmediate(() => {
-      try {
-        this.eventLogger?.logEvent({
-          requestId,
-          eventType: 'policy_violation',
-          provider: providerType,
-          actionTaken: gateResult.action,
-          threatScore: gateResult.threatScore,
-          matches: gateResult.matches,
-          requestPath: req.url ?? null,
-          sourceIp: req.socket.remoteAddress ?? null,
-          policyFile: this.config.policyPath ?? null,
-          metadata: {
-            gate: 'non-streaming',
-            tools: gateResult.violations.map((v) => v.tool),
-          },
-        });
-      } catch (logErr) {
-        logger.error({ err: logErr, requestId }, 'Failed to log policy violation');
-      }
-    });
+    this.logGateEvent(requestId, gateResult.action, gateResult.matches, gateResult.threatScore, gateResult.violations, providerType, req, 'non-streaming');
 
     if (gateResult.hardBlock) {
       const blocked: BlockedResponse = {
@@ -147,6 +129,40 @@ export class PalisadeProxy {
         'Response gated by policy',
       );
     }
+  }
+
+  /** Shared policy-violation event logging for both streaming and non-streaming gates. */
+  private logGateEvent(
+    requestId: string,
+    action: VerdictAction,
+    matches: PatternMatch[],
+    threatScore: number,
+    violations: GateViolation[],
+    providerType: ProviderType,
+    req: IncomingMessage,
+    gate: 'streaming' | 'non-streaming',
+  ): void {
+    setImmediate(() => {
+      try {
+        this.eventLogger?.logEvent({
+          requestId,
+          eventType: 'policy_violation',
+          provider: providerType,
+          actionTaken: action,
+          threatScore,
+          matches,
+          requestPath: req.url ?? null,
+          sourceIp: req.socket.remoteAddress ?? null,
+          policyFile: this.config.policyPath ?? null,
+          metadata: {
+            gate,
+            tools: violations.map((v) => v.tool),
+          },
+        });
+      } catch (logErr) {
+        logger.error({ err: logErr, requestId }, 'Failed to log policy violation');
+      }
+    });
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -306,9 +322,24 @@ export class PalisadeProxy {
 
     // Handle streaming vs non-streaming response
     if (isStreamingResponse(responseHeaders)) {
+      // T3-07: streaming hold-back gate (text deltas flow, tool_use blocks gated).
+      const streamingGate = this.responseGate
+        ? createStreamingGate(provider, this.responseGate)
+        : null;
       await pipeStreamingResponse(upstreamRes, res, provider, (fullText) => {
         logger.debug({ requestId, streamedChars: fullText.length }, 'Streaming response complete');
-      }, requestId);
+      }, requestId, streamingGate);
+
+      if (streamingGate) {
+        const summary = streamingGate.summary();
+        if (summary.matches.length > 0) {
+          this.logGateEvent(requestId, summary.action, summary.matches, summary.threatScore, summary.violations, providerType, req, 'streaming');
+          logger.warn(
+            { requestId, violations: summary.violations.length, threatScore: summary.threatScore, gate: 'streaming' },
+            'Streaming response gated by policy',
+          );
+        }
+      }
     } else {
       const responseBody = Buffer.from(await upstreamRes.arrayBuffer());
       let bodyToSend = responseBody;

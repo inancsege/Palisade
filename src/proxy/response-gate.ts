@@ -3,7 +3,8 @@ import { AnthropicProvider } from './providers/anthropic.js';
 import { OpenAIProvider } from './providers/openai.js';
 import type { PolicyConfig } from '../types/policy.js';
 import type { PatternMatch } from '../types/verdict.js';
-import { Tier3Engine, type BlockedCall } from '../detection/tier3/index.js';
+import type { ToolCall } from '../types/proxy.js';
+import { Tier3Engine, type BlockedCall, type Tier3Evaluation } from '../detection/tier3/index.js';
 import { computeThreatScore } from '../detection/tier1/scorer.js';
 
 export interface GateViolation {
@@ -92,6 +93,11 @@ export class ResponseGate {
     };
   }
 
+  /** Evaluate a batch of tool calls (used by the streaming gate per completed block). */
+  evaluateCalls(calls: ToolCall[]): Tier3Evaluation {
+    return this.engine.evaluate(calls);
+  }
+
   private rewrite(
     body: Record<string, unknown>,
     provider: LLMProvider,
@@ -103,7 +109,7 @@ export class ResponseGate {
   }
 }
 
-function blockNotice(blockedCalls: BlockedCall[]): string {
+export function blockNotice(blockedCalls: BlockedCall[]): string {
   return blockedCalls
     .map(
       ({ call, capabilities }) =>
