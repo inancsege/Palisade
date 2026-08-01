@@ -21,7 +21,7 @@ Palisade fills the gap: a **lightweight, local-first runtime layer** that combin
 
 ## How It Works
 
-Palisade operates as a **proxy middleware** between your agent framework and the LLM API. Today it inspects **outbound requests** before they reach the model; the response-side action gate (the return arrow below) is **planned, not yet implemented**:
+Palisade operates as a **proxy middleware** between your agent framework and the LLM API. It inspects **outbound requests** before they reach the model (Tiers 1–2) and gates **incoming responses** on the way back — detecting tool calls that violate declared capabilities and blocking or rewriting them (Tier 3):
 
 ```
 Agent Framework ──► Palisade ──► LLM Provider
@@ -37,8 +37,8 @@ Fast regex and heuristic filters that catch known injection signatures before an
 **Tier 2 — ML Classifier (~20ms warm, CPU-only)**
 A fine-tuned DeBERTa classifier that scores the input from 0.0 (safe) to 1.0 (injection), splitting long inputs into overlapping windows and taking the highest score. Runs a local ONNX model (~738MB), downloaded once via `palisade tier2 install` and cached on disk — no external API calls, no GPU.
 
-**Tier 3 — Behavioral Policy Engine (planned — not yet implemented)**
-Runtime monitoring of what the agent actually _does_ after receiving the LLM response. Per-tool capability declarations are checked against real execution: a weather tool calling `curl` to an undeclared IP gets blocked, a document summarizer attempting to write to `~/.ssh/` gets blocked, a skill reading `.env` when its manifest declares no filesystem access gets blocked.
+**Tier 3 — Behavioral Policy Engine**
+Every tool call in an LLM response is classified against the policy's per-tool capability manifests (`network_egress`, `filesystem`, `shell_exec`) — a weather tool calling `curl` to an undeclared IP gets blocked, a document summarizer attempting to write to `~/.ssh/` gets blocked, a skill reading `.env` when its manifest declares no filesystem access gets blocked. Configurable `block` / `warn` actions; hard 403 (optionally with response rewrite) for non-streaming responses, and hold-back gating for streaming (SSE) responses — text deltas flow while tool_use blocks are held until they can be evaluated and replaced or passed through.
 
 ### Canary Tokens (planned — not yet implemented)
 
@@ -132,7 +132,7 @@ Palisade is **not** a replacement for infrastructure sandboxing. Use it _alongsi
 
 - [x] **v0.1** — Tier 1 pattern engine + proxy mode + CLI (`palisade serve`, `palisade scan`)
 - [x] **v0.2** — Tier 2 ML classifier (ONNX, CPU-only) wired into the cascade; benchmark suite in progress
-- [ ] **v0.3** — Tier 3 behavioral policy engine (YAML capability manifests)
+- [x] **v0.3** — Tier 3 behavioral policy engine (YAML capability manifests) + response-side action gate
 - [ ] **v0.4** — Canary token injection + exfiltration anomaly detection
 - [ ] **v0.5** — Dashboard + event log + skill trust scoring
 - [ ] **v1.0** — Framework adapters (OpenClaw, LangGraph, CrewAI, Vercel AI SDK)
@@ -208,6 +208,11 @@ detection:
     enabled: true
     threshold: 0.75        # 0.0 - 1.0
     action: block
+  tier3:
+    enabled: true
+    action: block          # block | warn
+    unknown_tool: warn     # tools not declared in any manifest
+    block_response: false  # true = hard 403; false = rewritten response + violation headers
   canary:
     enabled: true
     rotate_interval: 3600  # seconds

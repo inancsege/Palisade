@@ -10,8 +10,8 @@
 
 ## 2. What it is
 - Palisade: a transparent reverse-proxy that scans LLM API traffic for prompt injection across
-  three tiers — regex (Tier 1) → local ONNX classifier (Tier 2) → hosted Lakera Guard (Tier 3,
-  opt-in, off by default).
+  three tiers — regex (Tier 1) → local ONNX classifier (Tier 2) → behavioral policy engine
+  (Tier 3, YAML capability manifests, local-only).
 
 ## 3. The credibility beat (the actual story)
 - We **pre-registered** the benchmark protocol in git *before* writing any Tier 2 code — link the

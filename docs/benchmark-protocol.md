@@ -20,7 +20,7 @@
 ## 1. Purpose & Scope
 
 Palisade v0.2 adds a three-tier cascade detector (Tier 1 regex → Tier 2 local ONNX classifier →
-Tier 3 hosted Lakera Guard). This protocol pre-registers the benchmark that will compare
+Tier 3 behavioral policy engine, YAML capability manifests, local-only). This protocol pre-registers the benchmark that will compare
 **Tier 1 alone vs Tier 1+2 vs Tier 1+2+3** so the published numbers are credible and reproducible.
 
 The headline number reported in the README MUST be drawn **only** from corpora marked
