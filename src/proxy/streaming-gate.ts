@@ -110,12 +110,17 @@ class AnthropicStreamingGate implements StreamingGate {
       return [dataPayload];
     }
 
-    if (e.type === 'input_json_delta') {
-      const held = this.held.get(index);
-      if (held) {
-        held.payloads.push(dataPayload);
-        if (typeof e.partial_json === 'string') held.jsonFragments.push(e.partial_json);
-        return [];
+    if (e.type === 'content_block_delta') {
+      // Real Anthropic SSE nests input_json_delta inside content_block_delta:
+      // {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"..."}}
+      const delta = e.delta as Record<string, unknown> | undefined;
+      if (delta?.type === 'input_json_delta') {
+        const held = this.held.get(index);
+        if (held) {
+          held.payloads.push(dataPayload);
+          if (typeof delta.partial_json === 'string') held.jsonFragments.push(delta.partial_json);
+          return [];
+        }
       }
       return [dataPayload];
     }

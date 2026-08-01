@@ -71,8 +71,14 @@ export function createMockUpstream(options: MockUpstreamOptions = {}): Server {
             res.end();
           }
         } else {
-          res.writeHead(status, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(body));
+          // Real LLM APIs send Content-Length on non-streaming JSON responses;
+          // the proxy must not forward a stale length when it rewrites the body.
+          const payload = JSON.stringify(body);
+          res.writeHead(status, {
+            'Content-Type': 'application/json',
+            'Content-Length': String(Buffer.byteLength(payload)),
+          });
+          res.end(payload);
         }
       };
 

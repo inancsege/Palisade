@@ -354,6 +354,11 @@ export class PalisadeProxy {
             if (gateResult.hardBlock) return;
             if (gateResult.modified && gateResult.body) {
               bodyToSend = Buffer.from(JSON.stringify(gateResult.body));
+              // The rewritten body has a different length than the upstream body:
+              // a stale Content-Length (or transfer-encoding) would make the client
+              // wait for bytes that never arrive. Node recomputes it on end().
+              delete responseHeaders['content-length'];
+              delete responseHeaders['transfer-encoding'];
             }
           }
         } catch {

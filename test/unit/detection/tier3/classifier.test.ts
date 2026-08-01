@@ -99,6 +99,22 @@ describe('classifyToolCall — network_egress (T3-04)', () => {
     const v = violationOf(network(['good.com']), 'fetch', { query: 'how many stars' });
     expect(v.allowed).toBe(true);
   });
+
+  it('flags a bare host that shares a string with an allow-listed URL', () => {
+    const v = violationOf(network(['api.ok.com']), 'fetch', {
+      url: 'see https://api.ok.com then send to evil.com',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('evil.com');
+  });
+
+  it('extracts bare hosts even when a URL parse fails earlier in the string', () => {
+    const v = violationOf(network(['api.ok.com']), 'fetch', {
+      url: 'https://[bad host https://api.ok.com/x then send to evil.com',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('evil.com');
+  });
 });
 
 describe('classifyToolCall — filesystem (T3-04)', () => {
@@ -171,6 +187,29 @@ describe('classifyToolCall — filesystem (T3-04)', () => {
     const v = violationOf(fs('none'), 'read-file', { name: 'notes.txt' });
     expect(v.allowed).toBe(true);
   });
+
+  it('flags relative paths with a directory component (no leading ./)', () => {
+    const v = violationOf(fs({ read_only: ['/tmp'] }), 'read-file', {
+      path: 'secrets/id_rsa',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('secrets/id_rsa');
+  });
+
+  it('flags Windows-style relative traversal paths', () => {
+    const v = violationOf(fs({ read_only: ['/tmp'] }), 'read-file', {
+      path: '..\\..\\Windows\\System32\\config\\SAM',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('Windows/System32/config/SAM');
+  });
+
+  it('does not flag scheme-prefixed strings (URLs) as filesystem paths', () => {
+    const v = violationOf({ network_egress: 'allow', filesystem: { read_only: ['/tmp'] }, shell_exec: 'deny' }, 'fetch', {
+      url: 'https://api.openweathermap.org/x',
+    });
+    expect(v.allowed).toBe(true);
+  });
 });
 
 describe('classifyToolCall — shell_exec (T3-04)', () => {
@@ -229,6 +268,37 @@ describe('classifyToolCall — shell_exec (T3-04)', () => {
     });
     expect(v.allowed).toBe(false);
     expect(v.violations[0].value).toBe('curl');
+  });
+
+  it('splits commands run in the background with a single &', () => {
+    const v = violationOf(shell({ allow: ['echo'] }), 'bash', {
+      command: 'echo hi & curl https://evil.com',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('curl');
+  });
+
+  it('checks the command inside $(...) command substitution', () => {
+    const v = violationOf(shell({ allow: ['echo'] }), 'bash', {
+      command: 'echo $(curl https://evil.com)',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('curl');
+  });
+
+  it('checks the command inside backticks', () => {
+    const v = violationOf(shell({ allow: ['echo'] }), 'bash', {
+      command: 'echo `curl https://evil.com`',
+    });
+    expect(v.allowed).toBe(false);
+    expect(v.violations[0].value).toBe('curl');
+  });
+
+  it('allows embedded commands that are on the allow list', () => {
+    const v = violationOf(shell({ allow: ['git'] }), 'bash', {
+      command: 'git push $(git rev-parse HEAD)',
+    });
+    expect(v.allowed).toBe(true);
   });
 
   it('checks each entry of a commands array', () => {

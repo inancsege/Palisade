@@ -3,6 +3,14 @@ import { AnthropicToolCallAccumulator } from '../../../src/proxy/providers/anthr
 import { OpenAIToolCallAccumulator } from '../../../src/proxy/providers/openai.js';
 
 describe('AnthropicToolCallAccumulator (streaming, T3-03)', () => {
+  // Real Anthropic SSE nests input_json_delta inside content_block_delta:
+  // {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"..."}}
+  const inputDelta = (index: number, partialJson: string) => ({
+    type: 'content_block_delta',
+    index,
+    delta: { type: 'input_json_delta', partial_json: partialJson },
+  });
+
   it('assembles a tool_use call from content_block_start + input_json_delta + stop', () => {
     const acc = new AnthropicToolCallAccumulator();
     expect(
@@ -19,8 +27,8 @@ describe('AnthropicToolCallAccumulator (streaming, T3-03)', () => {
         content_block: { type: 'tool_use', id: 'toolu_01', name: 'fetch', input: {} },
       }),
     ).toEqual([]);
-    expect(acc.ingest({ type: 'input_json_delta', index: 1, partial_json: '{"url": "https://a' })).toEqual([]);
-    expect(acc.ingest({ type: 'input_json_delta', index: 1, partial_json: '.com"}' })).toEqual([]);
+    expect(acc.ingest(inputDelta(1, '{"url": "https://a'))).toEqual([]);
+    expect(acc.ingest(inputDelta(1, '.com"}' ))).toEqual([]);
     const done = acc.ingest({ type: 'content_block_stop', index: 1 });
     expect(done).toHaveLength(1);
     expect(done[0]).toEqual({ id: 'toolu_01', name: 'fetch', arguments: { url: 'https://a.com' } });
@@ -29,10 +37,10 @@ describe('AnthropicToolCallAccumulator (streaming, T3-03)', () => {
   it('returns one call per completed tool_use block, in order', () => {
     const acc = new AnthropicToolCallAccumulator();
     acc.ingest({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 't1', name: 'a', input: {} } });
-    acc.ingest({ type: 'input_json_delta', index: 0, partial_json: '{}' });
+    acc.ingest(inputDelta(0, '{}'));
     const first = acc.ingest({ type: 'content_block_stop', index: 0 });
     acc.ingest({ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 't2', name: 'b', input: {} } });
-    acc.ingest({ type: 'input_json_delta', index: 1, partial_json: '{}' });
+    acc.ingest(inputDelta(1, '{}'));
     const second = acc.ingest({ type: 'content_block_stop', index: 1 });
     expect(first[0].name).toBe('a');
     expect(second[0].name).toBe('b');
@@ -45,7 +53,7 @@ describe('AnthropicToolCallAccumulator (streaming, T3-03)', () => {
       index: 0,
       content_block: { type: 'tool_use', id: 't1', name: 'x', input: { fallback: true } },
     });
-    acc.ingest({ type: 'input_json_delta', index: 0, partial_json: 'not json' });
+    acc.ingest(inputDelta(0, 'not json'));
     const done = acc.ingest({ type: 'content_block_stop', index: 0 });
     expect(done[0].arguments).toEqual({ fallback: true });
   });
@@ -60,7 +68,7 @@ describe('AnthropicToolCallAccumulator (streaming, T3-03)', () => {
 
   it('ignores input_json_delta with no pending block (out-of-order or truncated)', () => {
     const acc = new AnthropicToolCallAccumulator();
-    expect(acc.ingest({ type: 'input_json_delta', index: 5, partial_json: '{}' })).toEqual([]);
+    expect(acc.ingest(inputDelta(5, '{}'))).toEqual([]);
     expect(acc.finish()).toEqual([]);
   });
 

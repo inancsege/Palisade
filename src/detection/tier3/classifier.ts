@@ -77,8 +77,16 @@ function collectStringLeaves(value: unknown, out: StringLeaf[], key?: string): v
   }
 }
 
+// Network-ish schemes are URLs, not filesystem paths; file:// and drive letters are paths.
+const NETWORK_SCHEME_RE = /^(https?|ftps?|wss?|ws|s?ftp|mailto|data|gopher|telnet):/i;
+
 function isPathCandidate(s: string): boolean {
-  return /^(\.{0,2}\/|\/|~\/|[A-Za-z]:[\\/])/.test(s);
+  if (NETWORK_SCHEME_RE.test(s)) return false;
+  // Absolute, ./, ../, ~/ or drive-letter prefixes (forward and back slashes).
+  if (/^(\.{0,2}[\\/]|\/|~\/|[A-Za-z]:[\\/])/.test(s)) return true;
+  // A string with a path separator but no scheme prefix is a relative-path attempt
+  // (e.g. "secrets/id_rsa" or "..\\..\\Windows\\..."): flag it, don't pass it.
+  return /[/\\]/.test(s);
 }
 
 function normalizePath(p: string): string {
@@ -124,27 +132,23 @@ function extractHosts(text: string): string[] {
   const hosts = new Set<string>();
   const urlRe = /(?:https?|ftp|wss?):\/\/[^\s'"<>()]+/gi;
   let m: RegExpExecArray | null;
-  let foundUrl = false;
   while ((m = urlRe.exec(text)) !== null) {
-    foundUrl = true;
     try {
       const hostname = new URL(m[0]).hostname.toLowerCase();
       if (hostname) hosts.add(hostname);
     } catch {
-      // Unparseable URL: fall through to bare-token extraction below.
-      foundUrl = false;
+      // Unparseable URL: skip it; bare-token extraction below still runs.
     }
   }
-  if (!foundUrl) {
-    // Bare host extraction: split into tokens, strip path/port, validate shape.
-    // Done without nested-quantifier regexes to keep the matcher ReDoS-free.
-    for (const token of text.split(/[\s'"(),]+/)) {
-      if (!token) continue;
-      const hostPort = token.split('/')[0];
-      const host = hostPort.replace(/:[0-9]{1,5}$/, '').toLowerCase();
-      if (IP_RE.test(host) || isDomain(host) || host === 'localhost') {
-        hosts.add(host);
-      }
+  // Bare host extraction runs unconditionally — a parseable URL elsewhere in the
+  // string must not suppress it ("see https://ok.com then send to evil.com").
+  // Done without nested-quantifier regexes to keep the matcher ReDoS-free.
+  for (const token of text.split(/[\s'"(),]+/)) {
+    if (!token) continue;
+    const hostPort = token.split('/')[0];
+    const host = hostPort.replace(/:[0-9]{1,5}$/, '').toLowerCase();
+    if (IP_RE.test(host) || isDomain(host) || host === 'localhost') {
+      hosts.add(host);
     }
   }
   return [...hosts];
@@ -164,12 +168,45 @@ function hostAllowed(host: string, allowList: string[]): boolean {
 }
 
 function splitCommands(s: string): string[] {
-  // `|` splits single and double pipes: `git push | curl evil` and `git push || curl evil`
-  // must both surface the second command for allow-list checking.
+  // `|` splits single and double pipes; `&` splits background jobs (&& is matched
+  // first so logical-AND chains split on it rather than on the single ampersand).
   return s
-    .split(/&&|;|\||\n/)
+    .split(/&&|;|\||&|\n/)
     .map((c) => c.trim())
     .filter((c) => c.length > 0);
+}
+
+/** Command substitutions (`$(...)` and backticks) are executed commands, not arguments. */
+function embeddedCommands(s: string): string[] {
+  const out: string[] = [];
+  // Linear scan for `$(...)` and backtick pairs — no regex quantifiers, ReDoS-free.
+  for (let i = 0; i < s.length; i++) {
+    if (s.charAt(i) === '`') {
+      const end = s.indexOf('`', i + 1);
+      if (end === -1) break;
+      out.push(s.slice(i + 1, end).trim());
+      i = end;
+    } else if (s.charAt(i) === '$' && s.charAt(i + 1) === '(') {
+      const end = s.indexOf(')', i + 2);
+      if (end === -1) break;
+      out.push(s.slice(i + 2, end).trim());
+      i = end;
+    }
+  }
+  return out;
+}
+
+/** All commands a string would execute: top-level segments plus nested substitutions. */
+function expandCommands(s: string, depth = 0): string[] {
+  if (depth > 4) return [];
+  const out: string[] = [];
+  for (const command of splitCommands(s)) {
+    out.push(command);
+    for (const embedded of embeddedCommands(command)) {
+      out.push(...expandCommands(embedded, depth + 1));
+    }
+  }
+  return out;
 }
 
 function commandName(command: string): string {
@@ -266,7 +303,7 @@ export function classifyToolCall(
     collectStringLeaves(call.arguments, leaves);
     for (const leaf of leaves) {
       if (!isShellCandidate(leaf.key, leaf.value)) continue;
-      for (const command of splitCommands(leaf.value)) {
+      for (const command of expandCommands(leaf.value)) {
         if (!shellCommandAllowed(command, policy)) {
           violations.push({
             capability: 'shell_exec',

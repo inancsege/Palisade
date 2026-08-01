@@ -278,6 +278,14 @@ describe('Tier 3 response gate — OpenAI non-streaming (T3-06)', () => {
 });
 
 describe('Tier 3 response gate — streaming hold-back (T3-07)', () => {
+  // Real Anthropic SSE nests input_json_delta inside content_block_delta:
+  // {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"..."}}
+  const inputDelta = (index: number, partialJson: string) => ({
+    type: 'content_block_delta',
+    index,
+    delta: { type: 'input_json_delta', partial_json: partialJson },
+  });
+
   const anthropicToolStream = (id: string, name: string, partialJson: string) => [
     {
       data: JSON.stringify({ type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: 'test' } }),
@@ -292,7 +300,7 @@ describe('Tier 3 response gate — streaming hold-back (T3-07)', () => {
     {
       data: JSON.stringify({ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id, name, input: {} } }),
     },
-    { data: JSON.stringify({ type: 'input_json_delta', index: 1, partial_json: partialJson }) },
+    { data: JSON.stringify(inputDelta(1, partialJson)) },
     { data: JSON.stringify({ type: 'content_block_stop', index: 1 }) },
     { data: JSON.stringify({ type: 'message_stop' }) },
   ];
@@ -336,7 +344,7 @@ describe('Tier 3 response gate — streaming hold-back (T3-07)', () => {
           expect(body).toContain('Hello');
           expect(body).toContain('Palisade blocked');
           expect(body).not.toContain('toolu_evil');
-          expect(body).not.toContain('input_json_delta');
+          expect(body).not.toContain('partial_json');
           expect(body).toContain('"type":"text"');
         },
       );
@@ -465,13 +473,13 @@ describe('Tier 3 response gate — streaming hold-back (T3-07)', () => {
         {
           data: JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_ok', name: 'weather-lookup', input: {} } }),
         },
-        { data: JSON.stringify({ type: 'input_json_delta', index: 0, partial_json: '{"url": "https://api.openweathermap.org/x"}' }) },
+        { data: JSON.stringify(inputDelta(0, '{"url": "https://api.openweathermap.org/x"}')) },
       ];
       await withStreamingProxy(tier3Policy(), chunks, async (port) => {
         const res = await sendRequest({ port, body: { model: 'x', messages: [{ role: 'user', content: 'hi' }] } });
         const body = await res.text();
         expect(body).toContain('toolu_ok');
-        expect(body).toContain('input_json_delta');
+        expect(body).toContain('partial_json');
         expect(body).toContain('"type":"content_block_stop"');
       });
     });

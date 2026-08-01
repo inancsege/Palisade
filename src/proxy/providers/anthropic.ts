@@ -45,10 +45,15 @@ export class AnthropicToolCallAccumulator implements StreamingToolCallAccumulato
           jsonFragments: [],
         });
       }
-    } else if (e.type === 'input_json_delta') {
-      const pending = this.pending.get(e.index as number);
-      if (pending && typeof e.partial_json === 'string') {
-        pending.jsonFragments.push(e.partial_json);
+    } else if (e.type === 'content_block_delta') {
+      // Real Anthropic SSE nests input_json_delta inside content_block_delta:
+      // {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"..."}}
+      const delta = e.delta as Record<string, unknown> | undefined;
+      if (delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+        const pending = this.pending.get(e.index as number);
+        if (pending) {
+          pending.jsonFragments.push(delta.partial_json);
+        }
       }
     } else if (e.type === 'content_block_stop') {
       const pending = this.pending.get(e.index as number);
