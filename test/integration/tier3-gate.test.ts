@@ -276,3 +276,185 @@ describe('Tier 3 response gate — OpenAI non-streaming (T3-06)', () => {
     expect(violations[0].matches_json).toContain('network_egress');
   });
 });
+
+describe('Tier 3 response gate — streaming hold-back (T3-07)', () => {
+  const anthropicToolStream = (id: string, name: string, partialJson: string) => [
+    {
+      data: JSON.stringify({ type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: 'test' } }),
+    },
+    {
+      data: JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }),
+    },
+    {
+      data: JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hello' } }),
+    },
+    { data: JSON.stringify({ type: 'content_block_stop', index: 0 }) },
+    {
+      data: JSON.stringify({ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id, name, input: {} } }),
+    },
+    { data: JSON.stringify({ type: 'input_json_delta', index: 1, partial_json: partialJson }) },
+    { data: JSON.stringify({ type: 'content_block_stop', index: 1 }) },
+    { data: JSON.stringify({ type: 'message_stop' }) },
+  ];
+
+  async function withStreamingProxy(
+    policy: PolicyConfig,
+    chunks: Array<{ data: string; delayMs?: number }>,
+    fn: (proxyPort: number, mockPort: number) => Promise<void>,
+  ): Promise<void> {
+    const mockPort = await getAvailablePort();
+    const mock = createMockUpstream({ streaming: true, streamChunks: chunks });
+    await new Promise<void>((r) => mock.listen(mockPort, '127.0.0.1', r));
+    const pPort = await getAvailablePort();
+    const p = new PalisadeProxy(
+      {
+        port: pPort,
+        host: '127.0.0.1',
+        upstream: `http://127.0.0.1:${mockPort}`,
+        logLevel: 'error',
+        dbPath: ':memory:',
+        maxBodySize: 10 * 1024 * 1024,
+        timeout: 300,
+      },
+      policy,
+    );
+    await p.start();
+    await fn(pPort, mockPort);
+    await p.stop();
+    await new Promise<void>((r) => mock.close(() => r()));
+  }
+
+  describe('Anthropic streaming', () => {
+    it('lets text deltas flow and replaces a blocked tool_use block with a text notice', async () => {
+      await withStreamingProxy(
+        tier3Policy(),
+        anthropicToolStream('toolu_evil', 'weather-lookup', '{"url": "https://evil.example.com/x"}'),
+        async (port) => {
+          const res = await sendRequest({ port, body: { model: 'x', messages: [{ role: 'user', content: 'hi' }] } });
+          expect(res.status).toBe(200);
+          const body = await res.text();
+          expect(body).toContain('Hello');
+          expect(body).toContain('Palisade blocked');
+          expect(body).not.toContain('toolu_evil');
+          expect(body).not.toContain('input_json_delta');
+          expect(body).toContain('"type":"text"');
+        },
+      );
+    });
+
+    it('passes a compliant tool_use block through unchanged', async () => {
+      await withStreamingProxy(
+        tier3Policy(),
+        anthropicToolStream('toolu_ok', 'weather-lookup', '{"url": "https://api.openweathermap.org/x"}'),
+        async (port) => {
+          const res = await sendRequest({ port, body: { model: 'x', messages: [{ role: 'user', content: 'hi' }] } });
+          const body = await res.text();
+          expect(body).toContain('toolu_ok');
+          expect(body).toContain('input_json_delta');
+          expect(body).toContain('"type":"tool_use"');
+          expect(body).not.toContain('Palisade blocked');
+        },
+      );
+    });
+
+    it('passes a violating block through on warn (log-only) and logs the event', async () => {
+      const dbPath = join(tmpdir(), `palisade-t3-07-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+      const mockPort = await getAvailablePort();
+      const mock = createMockUpstream({ streaming: true, streamChunks: anthropicToolStream('toolu_evil', 'weather-lookup', '{"url": "https://evil.example.com/x"}') });
+      await new Promise<void>((r) => mock.listen(mockPort, '127.0.0.1', r));
+      const pPort = await getAvailablePort();
+      const p = new PalisadeProxy(
+        {
+          port: pPort,
+          host: '127.0.0.1',
+          upstream: `http://127.0.0.1:${mockPort}`,
+          logLevel: 'error',
+          dbPath,
+          maxBodySize: 10 * 1024 * 1024,
+          timeout: 300,
+        },
+        tier3Policy({ action: 'warn' }),
+      );
+      await p.start();
+      const res = await sendRequest({ port: pPort, body: { model: 'x', messages: [{ role: 'user', content: 'hi' }] } });
+      const body = await res.text();
+      expect(body).toContain('toolu_evil');
+      expect(body).not.toContain('Palisade blocked');
+      await new Promise((r) => setTimeout(r, 100));
+      await p.stop();
+      await new Promise<void>((r) => mock.close(() => r()));
+
+      const verifyDb = new EventDatabase(dbPath);
+      await verifyDb.initialize();
+      const verifyLogger = new EventLogger(verifyDb);
+      const events: EventRecord[] = verifyLogger.queryEvents({});
+      verifyLogger.close();
+      verifyDb.close();
+      try {
+        if (existsSync(dbPath)) unlinkSync(dbPath);
+      } catch {
+        /* Windows cleanup */
+      }
+      const violations = events.filter((e) => e.event_type === 'policy_violation');
+      expect(violations.length).toBeGreaterThanOrEqual(1);
+      expect(violations[0].action_taken).toBe('warn');
+      expect(violations[0].metadata_json).toContain('streaming');
+    });
+  });
+
+  describe('OpenAI streaming', () => {
+    const openaiToolStream = (id: string, name: string, argsFragment: string) => [
+      {
+        data: JSON.stringify({ id: 'chatcmpl-1', choices: [{ index: 0, delta: { role: 'assistant', content: '' } }] }),
+      },
+      { data: JSON.stringify({ id: 'chatcmpl-1', choices: [{ index: 0, delta: { content: 'Sure' } }] }) },
+      {
+        data: JSON.stringify({
+          id: 'chatcmpl-1',
+          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: argsFragment } }] } }],
+        }),
+      },
+      { data: JSON.stringify({ id: 'chatcmpl-1', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }) },
+    ];
+
+    it('replaces a blocked tool call with a text notice and rewrites finish_reason to stop', async () => {
+      await withStreamingProxy(
+        tier3Policy(),
+        openaiToolStream('call_1', 'weather-lookup', '{"url": "https://evil.example.com/x"}'),
+        async (port) => {
+          const res = await sendRequest({
+            port,
+            path: '/v1/chat/completions',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sk-test-fake' },
+            body: { model: 'gpt-4', messages: [{ role: 'user', content: 'hi' }] },
+          });
+          const body = await res.text();
+          expect(body).toContain('Sure');
+          expect(body).toContain('Palisade blocked');
+          expect(body).not.toContain('call_1');
+          expect(body).not.toContain('tool_calls');
+          expect(body).toContain('"finish_reason":"stop"');
+        },
+      );
+    });
+
+    it('passes a compliant tool call through unchanged', async () => {
+      await withStreamingProxy(
+        tier3Policy(),
+        openaiToolStream('call_2', 'weather-lookup', '{"url": "https://api.openweathermap.org/x"}'),
+        async (port) => {
+          const res = await sendRequest({
+            port,
+            path: '/v1/chat/completions',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sk-test-fake' },
+            body: { model: 'gpt-4', messages: [{ role: 'user', content: 'hi' }] },
+          });
+          const body = await res.text();
+          expect(body).toContain('call_2');
+          expect(body).toContain('"finish_reason":"tool_calls"');
+          expect(body).not.toContain('Palisade blocked');
+        },
+      );
+    });
+  });
+});
