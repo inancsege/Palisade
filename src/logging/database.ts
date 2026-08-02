@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS events (
   request_path  TEXT,
   source_ip     TEXT,
   policy_file   TEXT,
-  metadata_json TEXT
+  metadata_json TEXT,
+  skill_id      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
@@ -101,9 +102,12 @@ export class EventDatabase {
     if (!existingColumns.has('tier3_confidence')) {
       db.run('ALTER TABLE events ADD COLUMN tier3_confidence REAL');
     }
+    if (!existingColumns.has('skill_id')) {
+      db.run('ALTER TABLE events ADD COLUMN skill_id TEXT');
+    }
 
     db.run('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)');
-    db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2')");
+    db.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '3')");
 
     db.run(`
 CREATE TABLE IF NOT EXISTS tier3_cost_ledger (

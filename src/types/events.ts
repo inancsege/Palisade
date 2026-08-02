@@ -24,6 +24,7 @@ export interface EventRecord {
   source_ip: string | null;
   policy_file: string | null;
   metadata_json: string | null;
+  skill_id: string | null;
 }
 
 export interface EventQueryFilters {

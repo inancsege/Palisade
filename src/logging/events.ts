@@ -2,14 +2,19 @@ import type { EventDatabase } from './database.js';
 import type { EventRecord, EventQueryFilters, EventStats, EventType } from '../types/events.js';
 import type { VerdictAction, PatternMatch } from '../types/verdict.js';
 import type { ProviderType } from '../types/proxy.js';
+import { SkillTrustStore, type SkillTrustRecord } from './skill-trust.js';
 
 export class EventLogger {
   private db: EventDatabase;
+  private skillStore: SkillTrustStore;
   private dirty = false;
   private saveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(db: EventDatabase) {
     this.db = db;
+    this.skillStore = new SkillTrustStore(db, () => {
+      this.dirty = true;
+    });
     // Periodic save every 5 seconds if dirty
     this.saveTimer = setInterval(() => {
       if (this.dirty) {
@@ -30,12 +35,13 @@ export class EventLogger {
     sourceIp?: string | null;
     policyFile?: string | null;
     metadata?: Record<string, unknown> | null;
+    skillId?: string | null;
   }): void {
     const db = this.db.getDb();
 
     db.run(
-      `INSERT INTO events (request_id, event_type, provider, action_taken, threat_score, matches_json, request_path, source_ip, policy_file, metadata_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO events (request_id, event_type, provider, action_taken, threat_score, matches_json, request_path, source_ip, policy_file, metadata_json, skill_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         event.requestId,
         event.eventType,
@@ -47,6 +53,7 @@ export class EventLogger {
         event.sourceIp ?? null,
         event.policyFile ?? null,
         event.metadata ? JSON.stringify(event.metadata) : null,
+        event.skillId ?? null,
       ],
     );
 
@@ -64,7 +71,17 @@ export class EventLogger {
       }
     }
 
+    // T5-02: attribute the verdict to a named skill when one is present.
+    if (event.skillId) {
+      this.skillStore.record(event.skillId, event.actionTaken);
+    }
+
     this.dirty = true;
+  }
+
+  /** T5-01: per-skill trust records, riskiest-first. */
+  skills(): SkillTrustRecord[] {
+    return this.skillStore.list();
   }
 
   queryEvents(filters: EventQueryFilters = {}): EventRecord[] {

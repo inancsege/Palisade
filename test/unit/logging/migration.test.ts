@@ -184,6 +184,7 @@ describe('EventDatabase v0.2 additive migration (D19)', () => {
 
     const rows = rowsOf(db, Q_EVENTS);
     expect('tier2_confidence' in rows[0]).toBe(true);
+    expect('skill_id' in rows[0]).toBe(true);
     expect('tier3_confidence' in rows[0]).toBe(true);
     for (const row of rows) {
       expect(row.tier2_confidence).toBeNull();
@@ -193,14 +194,14 @@ describe('EventDatabase v0.2 additive migration (D19)', () => {
     eventDb.close();
   });
 
-  it('sets meta.schema_version to "2"', async () => {
+  it('sets meta.schema_version to "3"', async () => {
     const dbPath = await buildLegacyV01Db();
     const eventDb = new EventDatabase(dbPath);
     await eventDb.initialize();
     const db = eventDb.getDb();
 
     const ver = rowsOf(db, `SELECT value FROM meta WHERE key = 'schema_version'`);
-    expect(ver[0]?.value).toBe('2');
+    expect(ver[0]?.value).toBe('3');
 
     eventDb.close();
   });
@@ -235,8 +236,9 @@ describe('EventDatabase v0.2 additive migration (D19)', () => {
     // Still exactly one tier2/tier3 column, value still '2'.
     const rows = rowsOf(db, Q_EVENTS);
     expect('tier2_confidence' in rows[0]).toBe(true);
+    expect('skill_id' in rows[0]).toBe(true);
     const ver = rowsOf(db, `SELECT value FROM meta WHERE key = 'schema_version'`);
-    expect(ver[0]?.value).toBe('2');
+    expect(ver[0]?.value).toBe('3');
 
     second.close();
   });
@@ -256,9 +258,10 @@ describe('EventDatabase v0.2 additive migration (D19)', () => {
 
     const rows = rowsOf(db, Q_EVENTS);
     expect('tier2_confidence' in rows[0]).toBe(true);
+    expect('skill_id' in rows[0]).toBe(true);
     expect(rows[0].tier2_confidence).toBeNull();
     const ver = rowsOf(db, `SELECT value FROM meta WHERE key = 'schema_version'`);
-    expect(ver[0]?.value).toBe('2');
+    expect(ver[0]?.value).toBe('3');
 
     logger.close();
     eventDb.close();

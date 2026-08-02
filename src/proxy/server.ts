@@ -147,6 +147,13 @@ export class PalisadeProxy {
     }
   }
 
+  /** T5-02: skill attribution comes from the harness via the x-palisade-skill header. */
+  private skillIdFrom(req: IncomingMessage): string | null {
+    const header = req.headers['x-palisade-skill'];
+    if (typeof header !== 'string' || header.length === 0) return null;
+    return header.trim();
+  }
+
   /** Shared policy-violation event logging for both streaming and non-streaming gates. */
   private logGateEvent(
     requestId: string,
@@ -170,6 +177,7 @@ export class PalisadeProxy {
           requestPath: req.url ?? null,
           sourceIp: req.socket.remoteAddress ?? null,
           policyFile: this.config.policyPath ?? null,
+          skillId: this.skillIdFrom(req),
           metadata: {
             gate,
             tools: violations.map((v) => v.tool),
@@ -203,6 +211,7 @@ export class PalisadeProxy {
               requestPath: req.url ?? null,
               sourceIp,
               policyFile: this.config.policyPath ?? null,
+              skillId: this.skillIdFrom(req),
               metadata: { anomaly: anomaly.kind, host: anomaly.host, count: anomaly.count },
             });
           } catch (logErr) {
@@ -247,6 +256,7 @@ export class PalisadeProxy {
           requestPath: req.url ?? null,
           sourceIp: req.socket.remoteAddress ?? null,
           policyFile: this.config.policyPath ?? null,
+          skillId: this.skillIdFrom(req),
           metadata: { gate },
         });
       } catch (logErr) {
@@ -301,6 +311,7 @@ export class PalisadeProxy {
                 requestPath: req.url ?? null,
                 sourceIp: req.socket.remoteAddress ?? null,
                 policyFile: this.config.policyPath ?? null,
+                skillId: this.skillIdFrom(req),
               });
             } catch (logErr) {
               logger.error(
