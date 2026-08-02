@@ -75,6 +75,11 @@ export class PalisadeAdapter {
     await this.engine.close();
   }
 
+  /** The current canary token (for tests / diagnostics), or null when disabled. */
+  canaryToken(): string | null {
+    return this.canaryStore.currentToken();
+  }
+
   /**
    * Scan a chat-message list and, when allowed, return a body mutated with the
    * canary token. The returned `body` may share object identity with `messages`
