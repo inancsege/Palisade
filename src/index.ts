@@ -11,3 +11,5 @@ export { loadPolicy, validatePolicy, mergePolicyWithDefaults } from './policy/lo
 export { defaultPolicy } from './policy/defaults.js';
 export { EventDatabase } from './logging/database.js';
 export { EventLogger } from './logging/events.js';
+export { SkillTrustStore } from './logging/skill-trust.js';
+export { DashboardHandler } from './proxy/dashboard.js';

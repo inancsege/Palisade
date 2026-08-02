@@ -44,6 +44,31 @@ Every tool call in an LLM response is classified against the policy's per-tool c
 
 Palisade injects a rotating, deployment-wide canary token into every request's system prompt (opt-in via `detection.canary.enabled`). A token appearing in a response is evidence of data exfiltration: non-streaming responses are hard-blocked with 403, streaming responses are aborted before the token-bearing content reaches the client, and every hit is recorded as a `canary_triggered` event. Tokens rotate on `rotate_interval` (with a 15-minute grace window for in-flight requests). A companion egress anomaly tracker watches Tier 3 gate results per source IP — bursts of calls to the same host or floods of newly-seen hosts fire `anomaly_detected` events (fixed thresholds: 5 same-host calls or 5 distinct hosts per 60s).
 
+### Dashboard, Event Log & Skill Trust (v0.5)
+
+Every request, gate decision, canary hit and anomaly is persisted to the SQLite event log
+(`palisade.db` by default). Start the proxy with `--dashboard` and open the built-in
+read-only dashboard at `/_palisade/` on the proxy port — a live threat feed of
+request/block/warn/allowed stats, recent events, top triggered patterns, and a **skill
+trust scoreboard**:
+
+```bash
+palisade serve --port 8340 --upstream https://api.anthropic.com --dashboard
+# Browser: http://127.0.0.1:8340/_palisade/
+```
+
+The dashboard's JSON endpoints are also usable directly for automation:
+
+- `GET /_palisade/stats` — totals plus top patterns (`?since=<seconds>` window)
+- `GET /_palisade/events` — recent event log (`?limit=&offset=&action=&eventType=` filters)
+- `GET /_palisade/skills` — per-skill trust records, riskiest first
+
+**Skill trust scoring.** When an agent harness tags its requests with an `x-palisade-skill:<name>`
+header, Palisade attributes each verdict to that skill: total requests, blocked/warned counts,
+and a 0–1 trust score (starts at 1.0 for a new skill; blocks subtract 0.8, warns 0.15, clean
+allows recover 0.1). Skills that repeatedly trigger injection violations are instantly visible
+on the dashboard scoreboard — the signal for disabling or re-reviewing them.
+
 ## Supported Frameworks
 
 | Framework | Integration Method |
@@ -111,7 +136,7 @@ palisade serve --port 8340 --upstream https://api.anthropic.com
 | ML model | **ONNX Runtime** (CPU) | Cross-platform, no GPU dependency, ~738MB (downloaded on demand via `palisade tier2 install`) |
 | Policy definitions | **YAML + JSON Schema** (AJV) | Declarative policy config, human-readable |
 | Event log | **sql.js** (WASM SQLite) | Local-first, zero-config, no native build step |
-| Dashboard | **(planned)** | Real-time threat feed — not yet implemented |
+| Dashboard | **Built-in `/_palisade` (no framework)** | Self-contained HTML + JSON API, opt-in via `--dashboard` |
 | CLI | **commander** (TypeScript) | `palisade serve / scan / audit / report / claude / tier2` |
 
 ## Relationship to Existing Tools
@@ -134,7 +159,7 @@ Palisade is **not** a replacement for infrastructure sandboxing. Use it _alongsi
 - [x] **v0.2** — Tier 2 ML classifier (ONNX, CPU-only) wired into the cascade; benchmark suite in progress
 - [x] **v0.3** — Tier 3 behavioral policy engine (YAML capability manifests) + response-side action gate
 - [x] **v0.4** — Canary token injection + exfiltration anomaly detection
-- [ ] **v0.5** — Dashboard + event log + skill trust scoring
+- [x] **v0.5** — Dashboard + event log + skill trust scoring
 - [ ] **v1.0** — Framework adapters (OpenClaw, LangGraph, CrewAI, Vercel AI SDK)
 
 ## Quick Start
