@@ -36,6 +36,7 @@ export const serveCommand = new Command('serve')
   .option('--log-level <level>', 'Log level (debug|info|warn|error)', 'info')
   .option('--db <path>', 'Path to SQLite database file', './palisade.db')
   .option('--timeout <seconds>', 'Upstream request timeout in seconds', '300')
+  .option('--dashboard', 'Serve the read-only security dashboard at /_palisade/*')
   .action(async (options) => {
     printBanner();
 
@@ -67,7 +68,7 @@ export const serveCommand = new Command('serve')
 
     try {
       await proxy.start();
-      printStartup(config.port, config.host, config.upstream, config.policyPath);
+      printStartup(config.port, config.host, config.upstream, config.policyPath, config.dashboard);
     } catch (err) {
       // T2-09: a tier2_model_missing fast-fail surfaces a structured error.type + a one-line
       // `palisade tier2 install` remediation and exits fast (within 2s, no network attempt —

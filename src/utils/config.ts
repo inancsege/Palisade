@@ -10,6 +10,12 @@ const proxyConfigSchema = z.object({
   dbPath: z.string().default('./palisade.db'),
   maxBodySize: z.coerce.number().int().min(1024).default(10 * 1024 * 1024), // 10MB
   timeout: z.coerce.number().min(1).max(3600).default(300), // seconds
+  // `--dashboard` is a commander boolean flag; the env form PALISADE_DASHBOARD may
+  // arrive as a string ('1'/'true'), so coerce both to a real boolean.
+  dashboard: z
+    .union([z.boolean(), z.enum(['true', '1']), z.enum(['false', '0'])])
+    .transform((v) => v === true || v === '1' || v === 'true')
+    .default(false),
 });
 
 export function resolveProxyConfig(
@@ -24,6 +30,7 @@ export function resolveProxyConfig(
     dbPath: cliOptions.db ?? process.env.PALISADE_DB,
     maxBodySize: cliOptions.maxBodySize ?? process.env.PALISADE_MAX_BODY_SIZE,
     timeout: cliOptions.timeout ?? process.env.PALISADE_TIMEOUT,
+    dashboard: cliOptions.dashboard ?? process.env.PALISADE_DASHBOARD,
   };
 
   return proxyConfigSchema.parse(merged);

@@ -23,6 +23,7 @@ import {
   scanForCanary,
 } from './canary.js';
 import { EgressAnomalyTracker } from './egress-anomaly.js';
+import { DashboardHandler } from './dashboard.js';
 import type { PatternMatch, VerdictAction } from '../types/verdict.js';
 import { logger } from '../utils/logger.js';
 
@@ -36,6 +37,7 @@ export class PalisadeProxy {
   private responseGate: ResponseGate | null = null;
   private canaryStore: CanaryStore;
   private egressTracker: EgressAnomalyTracker;
+  private dashboardHandler: DashboardHandler | null = null;
 
   constructor(config: ProxyConfig, policy: PolicyConfig) {
     this.config = config;
@@ -59,6 +61,10 @@ export class PalisadeProxy {
     // No-op without a model (Slice A); real ONNX warmup slots in here in Slice B.
     await this.engine.initialize();
     this.eventLogger = new EventLogger(this.db);
+    // T5-03: opt-in read-only dashboard; defaults off so the proxy port is clean.
+    this.dashboardHandler = this.config.dashboard
+      ? new DashboardHandler(this.eventLogger)
+      : null;
 
     this.server = createServer((req, res) => {
       this.handleRequest(req, res).catch((err) => {
@@ -266,6 +272,12 @@ export class PalisadeProxy {
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // T5-03: reserved admin prefix is served locally, never proxied upstream.
+    if (this.dashboardHandler && this.dashboardHandler.matches(req.url ?? '/')) {
+      this.dashboardHandler.handle(req, res);
+      return;
+    }
+
     const requestId = randomUUID();
     const startTime = performance.now();
 

@@ -11,11 +11,20 @@ export function printClaudeBanner(port: number): void {
   console.log(chalk.gray(`  Proxy on http://127.0.0.1:${port} → https://api.anthropic.com\n`));
 }
 
-export function printStartup(port: number, host: string, upstream: string, policyPath?: string): void {
+export function printStartup(
+  port: number,
+  host: string,
+  upstream: string,
+  policyPath?: string,
+  dashboard?: boolean,
+): void {
   console.log(chalk.green('  Proxy listening on ') + chalk.bold(`http://${host}:${port}`));
   console.log(chalk.green('  Upstream:          ') + chalk.bold(upstream));
   if (policyPath) {
     console.log(chalk.green('  Policy:            ') + chalk.bold(policyPath));
+  }
+  if (dashboard) {
+    console.log(chalk.green('  Dashboard:         ') + chalk.bold(`http://${host}:${port}/_palisade/`));
   }
   console.log();
 }

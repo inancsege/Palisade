@@ -50,6 +50,8 @@ export interface ProxyConfig {
   dbPath: string;
   maxBodySize: number;
   timeout: number; // seconds
+  /** T5-03: serve the read-only dashboard at /_palisade/*. */
+  dashboard?: boolean;
 }
 
 export interface BlockedResponse {
