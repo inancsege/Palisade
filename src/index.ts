@@ -13,3 +13,19 @@ export { EventDatabase } from './logging/database.js';
 export { EventLogger } from './logging/events.js';
 export { SkillTrustStore } from './logging/skill-trust.js';
 export { DashboardHandler } from './proxy/dashboard.js';
+// v1.0 framework adapters
+export { PalisadeAdapter, type AdapterMessage, type GuardResult } from './adapters/core.js';
+export { PalisadeBlockedError, createPalisadeMiddleware } from './adapters/vercel.js';
+export { wrapLangChainModel, type ChatModelLike } from './adapters/langchain.js';
+export {
+  guardCrewAIKickoff,
+  wrapCrewAI,
+  type CrewKickoffInput,
+  type CrewAILike,
+} from './adapters/crewai.js';
+export {
+  buildOpenClawPreset,
+  openclawYaml,
+  type OpenClawPreset,
+  type OpenClawPresetOptions,
+} from './adapters/openclaw.js';

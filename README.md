@@ -80,9 +80,9 @@ on the dashboard scoreboard — the signal for disabling or re-reviewing them.
 | **Direct API** | HTTP proxy mode (point your base URL at Palisade) |
 | **Any agent** | Standalone proxy — swap your API base URL |
 
-> **Available today:** the **HTTP proxy mode** (the last two rows) — works with any framework or
-> direct API calls. The framework-specific adapters (OpenClaw, LangGraph, CrewAI, Vercel) are
-> **planned** and not yet implemented.
+> **Available today:** the **HTTP proxy mode** works with any framework or direct API call, and the
+> **v1.0 framework adapters** (Vercel AI SDK middleware, LangGraph/LangChain model wrapper, CrewAI
+> kickoff guard, OpenClaw gateway preset) are implemented — see `src/adapters/`.
 
 The simplest integration requires zero framework changes — run Palisade as a local proxy server and point your `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL` at it:
 
@@ -90,6 +90,52 @@ The simplest integration requires zero framework changes — run Palisade as a l
 palisade serve --port 8340 --upstream https://api.anthropic.com
 # Then in your agent config:
 # ANTHROPIC_BASE_URL=http://localhost:8340
+```
+
+### Vercel AI SDK (middleware)
+
+```ts
+import { wrapLanguageModel } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { PalisadeAdapter, createPalisadeMiddleware } from '@inancsege/palisade';
+
+const adapter = new PalisadeAdapter({ policy: defaultPolicy });
+const guarded = wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware: createPalisadeMiddleware(adapter),
+});
+```
+
+### LangGraph / LangChain (chat-model wrapper)
+
+```ts
+import { PalisadeAdapter, wrapLangChainModel } from '@inancsege/palisade';
+import { ChatOpenAI } from '@langchain/openai';
+
+const llm = wrapLangChainModel(new ChatOpenAI({ model: 'gpt-4o' }), new PalisadeAdapter({ policy: defaultPolicy }));
+```
+
+### CrewAI (kickoff guard)
+
+```ts
+import { PalisadeAdapter, wrapCrewAI } from '@inancsege/palisade';
+
+const guardedCrew = wrapCrewAI(myCrew, new PalisadeAdapter({ policy: defaultPolicy }));
+await guardedCrew.kickoff({ task_description: 'Summarize the incident notes' });
+```
+
+### OpenClaw (gateway preset)
+
+```bash
+palisade serve --port 8340 --upstream https://api.openai.com/v1
+```
+
+OpenClaw has no pre-LLM hook, so the preset routes its model connection through `palisade serve`. Build the config object in code or render a `connections.yaml` fragment:
+
+```js
+import { buildOpenClawPreset, openclawYaml } from '@inancsege/palisade';
+const preset = buildOpenClawPreset({ provider: 'openai', proxyPort: 8340, model: 'gpt-4o', apiKey: process.env.OPENAI_API_KEY });
+// paste `openclawYaml({...})` under the `connections:` key in ~/.openclaw/connections.yaml
 ```
 
 ## Architecture
@@ -160,7 +206,7 @@ Palisade is **not** a replacement for infrastructure sandboxing. Use it _alongsi
 - [x] **v0.3** — Tier 3 behavioral policy engine (YAML capability manifests) + response-side action gate
 - [x] **v0.4** — Canary token injection + exfiltration anomaly detection
 - [x] **v0.5** — Dashboard + event log + skill trust scoring
-- [ ] **v1.0** — Framework adapters (OpenClaw, LangGraph, CrewAI, Vercel AI SDK)
+- [x] **v1.0** — Framework adapters (OpenClaw, LangGraph, CrewAI, Vercel AI SDK)
 
 ## Quick Start
 
