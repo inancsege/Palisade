@@ -1,0 +1,58 @@
+name: CI
+
+# The always-on gate: lint, typecheck, build and the full unit suite with the 80% coverage
+# threshold. Kept separate from onnx-matrix.yml, which is path-triggered and downloads a
+# 700MB model — this one must stay fast enough to run on every push and PR.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json engines.node is >=20; 22 is what the project is developed on.
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck src
+        run: npm run typecheck
+
+      # Fails if the `ai` / `@langchain/core` published contracts drift from what the
+      # adapters implement. Type-only: neither package is a runtime dependency.
+      - name: Typecheck adapter contracts against the real framework SDKs
+        run: npm run typecheck:adapters
+
+      # MUST precede the tests: test/integration/cli-smoke.test.ts asserts against the built
+      # dist/cli/index.js and hard-fails when it is missing (dist/ is gitignored).
+      - name: Build
+        run: npm run build
+
+      - name: Unit + integration suite with the 80% coverage gate
+        run: npm run test:coverage
