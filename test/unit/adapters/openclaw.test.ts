@@ -1,65 +1,77 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildOpenClawPreset,
-  openclawYaml,
+  OPENCLAW_CONFIG_PATH,
+  OPENCLAW_PROVIDER_ID,
+  buildOpenClawConfig,
+  openclawConfigJson,
 } from '../../../src/adapters/openclaw.js';
 
-describe('OpenClaw gateway preset (T6-05)', () => {
-  it('builds a preset pointing an OpenAI-compatible provider at the Palisade proxy', () => {
-    const preset = buildOpenClawPreset({
-      provider: 'openai',
-      proxyHost: '127.0.0.1',
-      proxyPort: 8340,
-      model: 'gpt-4o',
-      apiKey: 'sk-test',
-    });
-    expect(preset.provider_id).toBe('openai_compatible');
-    expect(preset.base_url).toBe('http://127.0.0.1:8340/v1');
-    expect(preset.model).toBe('gpt-4o');
-    expect(preset.api_key).toBe('sk-test');
+/**
+ * OpenClaw reads an optional JSON5 config from `~/.openclaw/openclaw.json`, with model
+ * providers nested under `models.providers.<id>` using camelCase keys and an `api`
+ * discriminator of `openai-completions` | `anthropic-messages`. These tests pin that
+ * published shape — the preset is only useful if OpenClaw actually reads it.
+ * https://docs.openclaw.ai/gateway/configuration
+ */
+describe('OpenClaw preset — real openclaw.json contract', () => {
+  it('documents the config path OpenClaw actually reads', () => {
+    expect(OPENCLAW_CONFIG_PATH).toBe('~/.openclaw/openclaw.json');
   });
 
-  it('uses baseUrl verbatim (appending /v1 for openai) when no host/port given', () => {
-    const preset = buildOpenClawPreset({
-      provider: 'openai',
-      baseUrl: 'http://gateway.internal:9000',
-      model: 'custom-model',
-      apiKey: 'sk-test',
-    });
-    expect(preset.base_url).toBe('http://gateway.internal:9000/v1');
-    expect(preset.model).toBe('custom-model');
+  it('nests the provider under models.providers.<id>', () => {
+    const config = buildOpenClawConfig({ upstream: 'openai' });
+    expect(config.models.providers[OPENCLAW_PROVIDER_ID]).toBeDefined();
   });
 
-  it('keeps the anthropic transport for Claude routes', () => {
-    const preset = buildOpenClawPreset({
-      provider: 'anthropic',
-      baseUrl: 'http://localhost:8340',
-      model: 'claude-opus-4',
-      apiKey: 'proxy-key',
-    });
-    expect(preset.provider_id).toBe('anthropic');
-    expect(preset.base_url).toBe('http://localhost:8340');
+  it('uses the openai-completions api with a /v1 base URL for OpenAI upstreams', () => {
+    const provider = buildOpenClawConfig({ upstream: 'openai', proxyPort: 8340 })
+      .models.providers[OPENCLAW_PROVIDER_ID];
+    expect(provider.api).toBe('openai-completions');
+    expect(provider.baseUrl).toBe('http://127.0.0.1:8340/v1');
   });
 
-  it('adds a default api_key placeholder when none is supplied', () => {
-    const preset = buildOpenClawPreset({
-      provider: 'openai',
-      baseUrl: 'http://localhost:8340',
-    });
-    expect(preset.api_key).toBeDefined();
-    expect(typeof preset.api_key).toBe('string');
+  it('uses the anthropic-messages api with a bare base URL for Anthropic upstreams', () => {
+    const provider = buildOpenClawConfig({ upstream: 'anthropic', proxyPort: 8340 })
+      .models.providers[OPENCLAW_PROVIDER_ID];
+    expect(provider.api).toBe('anthropic-messages');
+    expect(provider.baseUrl).toBe('http://127.0.0.1:8340');
   });
 
-  it('renders a connections.yaml fragment for ~/.openclaw', () => {
-    const yaml = openclawYaml({
-      provider: 'openai',
-      baseUrl: 'http://localhost:8340',
-      model: 'gpt-4o',
-      apiKey: 'sk-proxy',
-    });
-    expect(yaml).toContain('provider_id: openai_compatible');
-    expect(yaml).toContain('base_url: http://localhost:8340/v1');
-    expect(yaml).toContain('model: gpt-4o');
-    expect(yaml).toContain('api_key: sk-proxy');
+  it('uses camelCase keys, never the snake_case ones OpenClaw ignores', () => {
+    const provider = buildOpenClawConfig({ upstream: 'openai' })
+      .models.providers[OPENCLAW_PROVIDER_ID] as unknown as Record<string, unknown>;
+    expect(provider).toHaveProperty('baseUrl');
+    expect(provider).toHaveProperty('apiKey');
+    expect(provider).not.toHaveProperty('base_url');
+    expect(provider).not.toHaveProperty('api_key');
+    expect(provider).not.toHaveProperty('provider_id');
+  });
+
+  it('declares the model in a models[] array of { id, name }', () => {
+    const provider = buildOpenClawConfig({ upstream: 'openai', model: 'gpt-4o' })
+      .models.providers[OPENCLAW_PROVIDER_ID];
+    expect(provider.models).toEqual([{ id: 'gpt-4o', name: expect.any(String) }]);
+  });
+
+  it('selects the routed model as the agent default using provider/model form', () => {
+    const config = buildOpenClawConfig({ upstream: 'openai', model: 'gpt-4o' });
+    expect(config.agents.defaults.model.primary).toBe(`${OPENCLAW_PROVIDER_ID}/gpt-4o`);
+  });
+
+  it('honours an explicit baseUrl over host/port', () => {
+    const provider = buildOpenClawConfig({ upstream: 'openai', baseUrl: 'http://palisade.internal:9000/' })
+      .models.providers[OPENCLAW_PROVIDER_ID];
+    expect(provider.baseUrl).toBe('http://palisade.internal:9000/v1');
+  });
+
+  it('strips repeated trailing slashes from an explicit baseUrl', () => {
+    const provider = buildOpenClawConfig({ upstream: 'openai', baseUrl: 'http://palisade.internal:9000///' })
+      .models.providers[OPENCLAW_PROVIDER_ID];
+    expect(provider.baseUrl).toBe('http://palisade.internal:9000/v1');
+  });
+
+  it('emits config that parses as JSON and round-trips to the same object', () => {
+    const config = buildOpenClawConfig({ upstream: 'anthropic', model: 'claude-sonnet-4' });
+    expect(JSON.parse(openclawConfigJson({ upstream: 'anthropic', model: 'claude-sonnet-4' }))).toEqual(config);
   });
 });
