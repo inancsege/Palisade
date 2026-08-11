@@ -16,7 +16,7 @@ export { DashboardHandler } from './proxy/dashboard.js';
 // v1.0 framework adapters
 export { PalisadeAdapter, type AdapterMessage, type GuardResult } from './adapters/core.js';
 export { PalisadeBlockedError, createPalisadeMiddleware } from './adapters/vercel.js';
-export { wrapLangChainModel, type ChatModelLike } from './adapters/langchain.js';
+export { wrapLangChainModel } from './adapters/langchain.js';
 export {
   guardCrewAIKickoff,
   wrapCrewAI,
