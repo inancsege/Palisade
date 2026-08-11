@@ -37,6 +37,23 @@ describe('CanaryTextScanner — cross-chunk token detection (T4-03)', () => {
     expect(scanner.push(token.slice(30))).toBe(token);
   });
 
+  it('catches a token buried mid-chunk in a chunk longer than the window', () => {
+    const store = new CanaryStore({ enabled: true, rotateIntervalSeconds: 3600 });
+    const token = store.currentToken()!;
+    const scanner = new CanaryTextScanner(store);
+    // A provider that buffers can emit the token followed by far more than
+    // `windowChars` of trailing text in a single chunk.
+    expect(scanner.push(`leaked=${token} ` + 'x'.repeat(200))).toBe(token);
+  });
+
+  it('catches a token spanning a boundary into an oversized chunk', () => {
+    const store = new CanaryStore({ enabled: true, rotateIntervalSeconds: 3600 });
+    const token = store.currentToken()!;
+    const scanner = new CanaryTextScanner(store);
+    expect(scanner.push(`prefix ${token.slice(0, 20)}`)).toBeNull();
+    expect(scanner.push(`${token.slice(20)} ` + 'y'.repeat(300))).toBe(token);
+  });
+
   it('stays silent on long benign streams', () => {
     const store = new CanaryStore({ enabled: true, rotateIntervalSeconds: 3600 });
     const scanner = new CanaryTextScanner(store);
