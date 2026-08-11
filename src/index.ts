@@ -18,10 +18,15 @@ export { PalisadeAdapter, type AdapterMessage, type GuardResult } from './adapte
 export { PalisadeBlockedError, createPalisadeMiddleware } from './adapters/vercel.js';
 export { wrapLangChainModel } from './adapters/langchain.js';
 export {
+  buildCrewAIEnv,
+  crewAILlmSnippet,
   guardCrewAIKickoff,
   wrapCrewAI,
-  type CrewKickoffInput,
+  type CrewAIEnv,
   type CrewAILike,
+  type CrewAIRoutingOptions,
+  type CrewAIUpstream,
+  type CrewKickoffInput,
 } from './adapters/crewai.js';
 export {
   OPENCLAW_CONFIG_PATH,
