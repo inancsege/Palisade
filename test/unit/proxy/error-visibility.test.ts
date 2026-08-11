@@ -40,6 +40,7 @@ function createMockProvider(): LLMProvider {
   return {
     extractTexts: vi.fn().mockReturnValue([]),
     extractStreamingText: vi.fn().mockReturnValue('partial'),
+    extractToolCalls: vi.fn().mockReturnValue([]),
   };
 }
 

@@ -1,11 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { classifyToolCall } from '../../../../src/detection/tier3/classifier.js';
 import type { ToolCall } from '../../../../src/types/proxy.js';
-import type { CapabilityDefaults } from '../../../../src/types/policy.js';
+import type { EffectiveCapabilities } from '../../../../src/detection/tier3/classifier.js';
+import type { FilesystemPolicy, ShellExecPolicy } from '../../../../src/types/policy.js';
 
-const DEFAULT_CAPS: CapabilityDefaults = {
+/**
+ * The shipped defaults AFTER the normalization `Tier3Engine.defaultsAsEffectiveCaps()`
+ * applies. `classifyToolCall` takes `EffectiveCapabilities`, never the raw
+ * `CapabilityDefaults` shorthand — a bare `read_only` default normalizes to an EMPTY
+ * path allowlist, i.e. no path is permitted.
+ */
+const DEFAULT_CAPS: EffectiveCapabilities = {
   network_egress: 'deny',
-  filesystem: 'read_only',
+  filesystem: { read_only: [] },
   shell_exec: 'deny',
 };
 
@@ -13,12 +20,16 @@ function call(name: string, args: unknown): ToolCall {
   return { name, arguments: args };
 }
 
-function violationOf(caps: { network_egress: unknown; filesystem: unknown; shell_exec: unknown }, name: string, args: unknown) {
+function violationOf(caps: EffectiveCapabilities, name: string, args: unknown) {
   return classifyToolCall(call(name, args), caps);
 }
 
 describe('classifyToolCall — network_egress (T3-04)', () => {
-  const network = (allow: string[]) => ({ network_egress: { allow }, filesystem: 'none', shell_exec: 'deny' });
+  const network = (allow: string[]): EffectiveCapabilities => ({
+    network_egress: { allow },
+    filesystem: 'none',
+    shell_exec: 'deny',
+  });
 
   it('allows a fetch tool hitting an allow-listed host', () => {
     const v = violationOf(network(['api.openweathermap.org']), 'fetch', {
@@ -118,7 +129,11 @@ describe('classifyToolCall — network_egress (T3-04)', () => {
 });
 
 describe('classifyToolCall — filesystem (T3-04)', () => {
-  const fs = (policy: unknown) => ({ network_egress: 'deny', filesystem: policy, shell_exec: 'deny' });
+  const fs = (policy: FilesystemPolicy): EffectiveCapabilities => ({
+    network_egress: 'deny',
+    filesystem: policy,
+    shell_exec: 'deny',
+  });
 
   it('allows a path under the read_only allow prefix', () => {
     const v = violationOf(fs({ read_only: ['./workspace/docs/'] }), 'read-file', {
@@ -213,7 +228,11 @@ describe('classifyToolCall — filesystem (T3-04)', () => {
 });
 
 describe('classifyToolCall — shell_exec (T3-04)', () => {
-  const shell = (policy: unknown) => ({ network_egress: 'deny', filesystem: 'none', shell_exec: policy });
+  const shell = (policy: ShellExecPolicy): EffectiveCapabilities => ({
+    network_egress: 'deny',
+    filesystem: 'none',
+    shell_exec: policy,
+  });
 
   it('allows a command on the allow list', () => {
     const v = violationOf(shell({ allow: ['python3', 'node'] }), 'code-runner', {
@@ -352,7 +371,7 @@ describe('classifyToolCall — capability resolution (T3-04)', () => {
 });
 
 describe('classifyToolCall — egressHosts reporting (T4-04)', () => {
-  const egressOnly = (allow: string[]) => ({
+  const egressOnly = (allow: string[]): EffectiveCapabilities => ({
     network_egress: { allow },
     filesystem: 'none',
     shell_exec: 'deny',

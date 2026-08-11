@@ -108,7 +108,7 @@ describe('Tier2Engine stub', () => {
         protected async loadClassifier(): Promise<never> {
           return fakeClassifier() as never;
         }
-        protected runInference(): { calibratedConfidence: number; raw?: number } {
+        protected async runInference(): Promise<{ calibratedConfidence: number; raw?: number }> {
           throw new Error('boom: simulated inference failure');
         }
       }
@@ -127,7 +127,7 @@ describe('Tier2Engine stub', () => {
 
     it('scan() NEVER rejects even when inference throws', async () => {
       class FailingTier2Engine extends Tier2Engine {
-        protected runInference(): { calibratedConfidence: number; raw?: number } {
+        protected async runInference(): Promise<{ calibratedConfidence: number; raw?: number }> {
           throw new Error('boom');
         }
       }

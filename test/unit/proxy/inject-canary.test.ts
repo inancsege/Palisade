@@ -7,6 +7,11 @@ const anthropic = new AnthropicProvider();
 const openai = new OpenAIProvider();
 const TOKEN = 'palcanary-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
+/** `injectCanaryToken` returns an opaque body; narrow `messages` for indexed assertions. */
+function messagesOf(body: Record<string, unknown>): Array<Record<string, unknown>> {
+  return body.messages as Array<Record<string, unknown>>;
+}
+
 describe('injectCanaryToken — Anthropic (T4-02)', () => {
   it('appends to a string system prompt', () => {
     const out = injectCanaryToken({ system: 'You are helpful.', messages: [] }, anthropic, TOKEN);
@@ -50,8 +55,8 @@ describe('injectCanaryToken — OpenAI (T4-02)', () => {
       openai,
       TOKEN,
     );
-    expect(out.messages[0]).toEqual({ role: 'system', content: `Be concise.\n\n${TOKEN}` });
-    expect(out.messages[1]).toEqual({ role: 'user', content: 'hi' });
+    expect(messagesOf(out)[0]).toEqual({ role: 'system', content: `Be concise.\n\n${TOKEN}` });
+    expect(messagesOf(out)[1]).toEqual({ role: 'user', content: 'hi' });
   });
 
   it('appends a text part to a system message with array content', () => {
@@ -60,7 +65,7 @@ describe('injectCanaryToken — OpenAI (T4-02)', () => {
       openai,
       TOKEN,
     );
-    expect(out.messages[0].content).toEqual([
+    expect(messagesOf(out)[0].content).toEqual([
       { type: 'text', text: 'Hi' },
       { type: 'text', text: TOKEN },
     ]);

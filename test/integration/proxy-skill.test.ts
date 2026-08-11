@@ -28,7 +28,7 @@ describe('Proxy skill attribution via x-palisade-skill (T5-02)', () => {
   it('attributes blocked requests to the skill named by the header', async () => {
     const mock = createMockUpstream({});
     const mPort = await getAvailablePort();
-    await new Promise((r) => mock.listen(mPort, '127.0.0.1', r));
+    await new Promise<void>((r) => { mock.listen(mPort, '127.0.0.1', () => r()); });
 
     const dbPath = join(tmpdir(), `palisade-t5-02-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
     const pPort = await getAvailablePort();

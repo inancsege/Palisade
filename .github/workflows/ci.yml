@@ -46,8 +46,8 @@ jobs:
 
       # Fails if the `ai` / `@langchain/core` published contracts drift from what the
       # adapters implement. Type-only: neither package is a runtime dependency.
-      - name: Typecheck adapter contracts against the real framework SDKs
-        run: npm run typecheck:adapters
+      - name: Typecheck all tests, incl. adapter contracts against the real framework SDKs
+        run: npm run typecheck:tests
 
       # MUST precede the tests: test/integration/cli-smoke.test.ts asserts against the built
       # dist/cli/index.js and hard-fails when it is missing (dist/ is gitignored).

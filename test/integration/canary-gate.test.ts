@@ -111,7 +111,7 @@ describe('Canary gate — non-streaming response (T4-03)', () => {
   beforeAll(async () => {
     mockPort = await getAvailablePort();
     mock = createEchoUpstream();
-    await new Promise((r) => mock.listen(mockPort, '127.0.0.1', r));
+    await new Promise<void>((r) => { mock.listen(mockPort, '127.0.0.1', () => r()); });
   });
 
   afterAll(async () => {
@@ -127,7 +127,7 @@ describe('Canary gate — non-streaming response (T4-03)', () => {
       path: '/v1/messages',
       body: { model: 'x', messages: [{ role: 'user', content: 'hi' }] },
     });
-    const body = await res.json();
+    const body = (await res.json()) as { error: { type: string; verdict: string } };
 
     expect(res.status).toBe(403);
     expect(body.error.type).toBe('canary_detected');
@@ -149,7 +149,7 @@ describe('Canary gate — streaming response (T4-03)', () => {
   beforeAll(async () => {
     mockPort = await getAvailablePort();
     mock = createEchoUpstream({ streaming: true });
-    await new Promise((r) => mock.listen(mockPort, '127.0.0.1', r));
+    await new Promise<void>((r) => { mock.listen(mockPort, '127.0.0.1', () => r()); });
   });
 
   afterAll(async () => {

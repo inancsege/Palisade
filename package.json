@@ -21,7 +21,7 @@
     "test:coverage": "vitest run --project unit --coverage",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
-    "typecheck:adapters": "tsc -p tsconfig.test.json",
+    "typecheck:tests": "tsc -p tsconfig.test.json",
     "prepare": "test -f src/index.ts && tsup || true"
   },
   "peerDependencies": {

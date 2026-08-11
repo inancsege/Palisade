@@ -72,12 +72,10 @@ export function captureIo(): {
   // bypasses console.*. Restored in restore() below.
   const originalStdoutWrite = process.stdout.write.bind(process.stdout);
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
-  // @ts-expect-error: signature compatibility
   process.stdout.write = (chunk: string | Uint8Array): boolean => {
     stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
     return true;
   };
-  // @ts-expect-error: signature compatibility
   process.stderr.write = (chunk: string | Uint8Array): boolean => {
     stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
     return true;

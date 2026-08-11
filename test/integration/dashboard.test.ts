@@ -10,7 +10,7 @@ import { createMockUpstream } from '../helpers/mock-upstream.js';
 async function startProxy(dashboard = true) {
   const mock = createMockUpstream({});
   const mPort = await getAvailablePort();
-  await new Promise((r) => mock.listen(mPort, '127.0.0.1', r));
+  await new Promise<void>((r) => { mock.listen(mPort, '127.0.0.1', () => r()); });
 
   const dbPath = join(tmpdir(), `palisade-t5-03-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
   const pPort = await getAvailablePort();
@@ -51,7 +51,7 @@ describe('Dashboard API (T5-03)', () => {
     const res = await fetch(`http://127.0.0.1:${s.proxyPort}/_palisade/stats`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
-    const stats = await res.json();
+    const stats = (await res.json()) as { totalRequests: number; blockedCount: number };
     expect(typeof stats.totalRequests).toBe('number');
     expect(typeof stats.blockedCount).toBe('number');
     expect(stats.totalRequests).toBe(0);
@@ -69,7 +69,7 @@ describe('Dashboard API (T5-03)', () => {
 
     const res = await fetch(`http://127.0.0.1:${s.proxyPort}/_palisade/events?limit=10`);
     expect(res.status).toBe(200);
-    const events = await res.json();
+    const events = (await res.json()) as Array<{ request_id: string; action_taken: string }>;
     expect(Array.isArray(events)).toBe(true);
     expect(events.length).toBe(1);
     expect(events[0].request_id).toBeTruthy();
@@ -94,12 +94,16 @@ describe('Dashboard API (T5-03)', () => {
 
     const res = await fetch(`http://127.0.0.1:${s.proxyPort}/_palisade/skills`);
     expect(res.status).toBe(200);
-    const skills = await res.json();
+    const skills = (await res.json()) as Array<{
+      skillId: string;
+      totalRequests: number;
+      trustScore: number;
+    }>;
     expect(Array.isArray(skills)).toBe(true);
-    const skill = skills.find((sk: { skillId: string }) => sk.skillId === 'web-research');
+    const skill = skills.find((sk) => sk.skillId === 'web-research');
     expect(skill).toBeDefined();
-    expect(skill.totalRequests).toBe(1);
-    expect(skill.trustScore).toBe(1.0);
+    expect(skill!.totalRequests).toBe(1);
+    expect(skill!.trustScore).toBe(1.0);
     await s.stop();
   });
 

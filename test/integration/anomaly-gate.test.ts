@@ -62,7 +62,7 @@ describe('Egress anomaly gate (T4-05)', () => {
   it('logs an anomaly_detected burst event when the same allow-listed host is called 5x in one window', async () => {
     const mock = createMockUpstream({ body: egressResponse('api.openweathermap.org', 5) });
     const mPort = await getAvailablePort();
-    await new Promise((r) => mock.listen(mPort, '127.0.0.1', r));
+    await new Promise<void>((r) => { mock.listen(mPort, '127.0.0.1', () => r()); });
 
     const dbPath = join(tmpdir(), `palisade-t4-05-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
     const pPort = await getAvailablePort();
@@ -101,7 +101,7 @@ describe('Egress anomaly gate (T4-05)', () => {
   it('stays quiet below the burst threshold', async () => {
     const mock = createMockUpstream({ body: egressResponse('api.openweathermap.org', 2) });
     const mPort = await getAvailablePort();
-    await new Promise((r) => mock.listen(mPort, '127.0.0.1', r));
+    await new Promise<void>((r) => { mock.listen(mPort, '127.0.0.1', () => r()); });
 
     const dbPath = join(tmpdir(), `palisade-t4-05b-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
     const pPort = await getAvailablePort();

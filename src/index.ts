@@ -8,6 +8,7 @@ export { computeVerdict } from './detection/verdict.js';
 export { normalize, decodeEncodings } from './detection/tier1/normalizer.js';
 export { PalisadeProxy } from './proxy/server.js';
 export { loadPolicy, validatePolicy, mergePolicyWithDefaults } from './policy/loader.js';
+export type { PartialPolicyConfig } from './types/policy.js';
 export { defaultPolicy } from './policy/defaults.js';
 export { EventDatabase } from './logging/database.js';
 export { EventLogger } from './logging/events.js';

@@ -1,19 +1,17 @@
 {
-  // Type-checks the adapter tests against the REAL framework SDK types (`ai`,
-  // `@langchain/core`). This is the gate that proves the adapters still match their
-  // frameworks' published contracts — a shape drift fails here even if the runtime
-  // tests happen to pass.
+  // Type-checks the whole test tree, including the adapter tests that are compiled against
+  // the REAL framework SDK types (`ai`, `@langchain/core`). This is the gate that proves the
+  // adapters still match their frameworks' published contracts — a shape drift fails here
+  // even when the runtime tests happen to pass.
   //
-  // Scope note: `test/**` at large is NOT included yet. Those files were never
-  // type-checked (the root tsconfig excludes `test/`) and currently carry 36
-  // pre-existing errors unrelated to the adapters. Widening the include is tracked
-  // as separate cleanup — see README "Known gaps".
+  // The root tsconfig.json deliberately excludes `test/` because it emits `dist/` from
+  // `src/` only; this config is noEmit and exists purely as a checking pass.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*", "test/unit/adapters/**/*"],
+  "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }

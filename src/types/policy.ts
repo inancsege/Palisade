@@ -7,6 +7,19 @@ export interface PolicyConfig {
   detection: DetectionPolicyConfig;
 }
 
+/**
+ * What `mergePolicyWithDefaults` genuinely accepts. A plain `Partial<PolicyConfig>` is too
+ * strict: the merge spreads defaults at every nested level, so a policy file may supply
+ * `detection.tier2.enabled` alone without restating the rest of the tier. This type says
+ * that, instead of forcing callers to hand over fully-formed sub-objects.
+ */
+export type PartialPolicyConfig = {
+  version?: string;
+  defaults?: Partial<CapabilityDefaults>;
+  tools?: Record<string, ToolPolicy>;
+  detection?: { [K in keyof DetectionPolicyConfig]?: Partial<DetectionPolicyConfig[K]> };
+};
+
 export interface CapabilityDefaults {
   network_egress: 'allow' | 'deny';
   filesystem: 'none' | 'read_only' | 'read_write';

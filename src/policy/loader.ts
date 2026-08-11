@@ -4,7 +4,7 @@ import * as ajvModule from 'ajv';
 import { policySchema } from './schema.js';
 import { defaultPolicy } from './defaults.js';
 import { PolicyError } from '../utils/errors.js';
-import type { PolicyConfig } from '../types/policy.js';
+import type { PartialPolicyConfig, PolicyConfig } from '../types/policy.js';
 
 const AjvClass = (ajvModule as Record<string, unknown>).Ajv ??
   (ajvModule as Record<string, unknown>).default ??
@@ -56,7 +56,7 @@ export function validateAndMerge(parsed: unknown, filePath?: string): PolicyConf
     );
   }
 
-  const merged = mergePolicyWithDefaults(parsed as Partial<PolicyConfig>);
+  const merged = mergePolicyWithDefaults(parsed as PartialPolicyConfig);
 
   // Cross-field validation: block_threshold must be > warn_threshold
   if (merged.detection.tier1.block_threshold <= merged.detection.tier1.warn_threshold) {
@@ -92,7 +92,7 @@ export function validateAndMerge(parsed: unknown, filePath?: string): PolicyConf
   return merged;
 }
 
-export function mergePolicyWithDefaults(partial: Partial<PolicyConfig>): PolicyConfig {
+export function mergePolicyWithDefaults(partial: PartialPolicyConfig): PolicyConfig {
   return {
     version: partial.version ?? defaultPolicy.version,
     defaults: {

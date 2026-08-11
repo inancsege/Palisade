@@ -81,7 +81,7 @@ on the dashboard scoreboard — the signal for disabling or re-reviewing them.
 
 > **Verified against the real SDKs.** The Vercel and LangChain adapters are tested through the
 > actual `ai` and `@langchain/core` packages (`test/unit/adapters/`), and `npm run
-> typecheck:adapters` fails if either framework's published contract drifts from what Palisade
+> typecheck:tests` fails if either framework's published contract drifts from what Palisade
 > implements. `ai`/`@langchain/core` are **optional peer dependencies** — nothing is imported at
 > runtime unless you use that adapter.
 
