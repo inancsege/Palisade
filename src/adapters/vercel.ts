@@ -1,11 +1,16 @@
-import type { BlockedResponse } from '../types/proxy.js';
+import type {
+  LanguageModelV2CallOptions,
+  LanguageModelV2Content,
+  LanguageModelV2Middleware,
+  LanguageModelV2Prompt,
+  LanguageModelV2StreamPart,
+} from '@ai-sdk/provider';
+import type { BlockedResponse, ToolCall } from '../types/proxy.js';
 import { PalisadeAdapter, type AdapterMessage } from './core.js';
 
 /**
  * Error thrown when the adapter decides a request/response must be blocked.
- * Carries the same `{ error }` payload shape as the proxy's `BlockedResponse`,
- * and the middleware-dispatchable `status`/`statusText` fields the Vercel AI SDK
- * expects from `JSONResponseError`.
+ * Carries the same `{ error }` payload shape as the proxy's `BlockedResponse`.
  */
 export class PalisadeBlockedError extends Error {
   readonly statusCode: number;
@@ -19,160 +24,151 @@ export class PalisadeBlockedError extends Error {
   }
 }
 
+function blockedToolCallBody(violations: Array<{ tool: string; capabilities: string[] }>): BlockedResponse {
+  return {
+    error: {
+      type: 'prompt_injection_detected',
+      message: `Palisade blocked tool calls: ${violations
+        .map((v) => `${v.tool} (${v.capabilities.join(', ')})`)
+        .join('; ')}`,
+      verdict: 'block',
+      threatScore: 0,
+      requestId: '',
+    },
+  };
+}
+
+function canaryLeakBody(): BlockedResponse {
+  return {
+    error: {
+      type: 'canary_detected',
+      message: 'Palisade detected the canary token in the model output stream',
+      verdict: 'block',
+      threatScore: 1,
+      requestId: '',
+    },
+  };
+}
+
 /**
- * A minimal stand-in for the Vercel AI SDK's `LanguageModelV1Message` — the SDK
- * is intentionally NOT a dependency; this adapter is duck-typed against the
- * documented `wrapLanguageModel({ model, middleware })` contract. `input` may be
- * a raw prompt string or an array of `{ role, content }` messages.
+ * Flatten a `LanguageModelV2Prompt` into the scannable messages Palisade's engine
+ * takes. System messages carry a plain string; every other role carries an array of
+ * typed parts, of which only `text` parts hold injectable content.
  */
-export interface AISDKMessage {
-  role: string;
-  content?: string | Array<{ type?: string; text?: string }>;
-}
-
-export interface PalisadeMiddleware {
-  transformParams: (args: { params: { input?: unknown; [k: string]: unknown } }) => Promise<{
-    input?: unknown;
-    [k: string]: unknown;
-  }>;
-  wrapGenerate: (args: {
-    doGenerate: (params: unknown) => Promise<unknown>;
-  }) => (params: unknown) => Promise<unknown>;
-  wrapStream: (args: {
-    doStream: (params: unknown) => Promise<AsyncIterable<unknown>>;
-  }) => (params: unknown) => AsyncIterable<unknown>;
-}
-
-function isPromptString(value: unknown): value is string {
-  return typeof value === 'string';
-}
-
-function isMessagesShape(value: unknown): value is AISDKMessage[] {
-  return Array.isArray(value) && value.every((m) => !!m && typeof (m as AISDKMessage).role === 'string');
-}
-
-function toAdapterMessages(messages: AISDKMessage[]): AdapterMessage[] {
-  return messages.map((m) => {
-    if (typeof m.content === 'string') {
-      return { role: m.role, content: m.content };
+function promptToAdapterMessages(prompt: LanguageModelV2Prompt): AdapterMessage[] {
+  return prompt.map((message): AdapterMessage => {
+    if (message.role === 'system') {
+      return { role: 'system', content: message.content };
     }
-    const parts = Array.isArray(m.content)
-      ? m.content.filter((p) => typeof p === 'object' && p && p.type === 'text' && typeof p.text === 'string')
-      : [];
-    return {
-      role: m.role,
-      content: parts.length > 0
-        ? parts.map((p) => ({ type: 'text', text: (p as { text: string }).text }))
-        : '',
-    };
+    // `content` is a union of part-array types across roles; widen once so the
+    // text filter resolves against a single signature.
+    const parts = message.content as ReadonlyArray<{ type: string; text?: unknown }>;
+    const text = parts
+      .filter((part) => part.type === 'text' && typeof part.text === 'string')
+      .map((part) => ({ type: 'text', text: part.text as string }));
+    return { role: message.role, content: text };
   });
 }
 
-function fromAdapterMessages(messages: AdapterMessage[]): AISDKMessage[] {
-  return messages.map((m) => {
-    if (typeof m.content === 'string') return { role: m.role, content: m.content };
-    return { role: m.role, content: m.content as Array<{ type?: string; text?: string }> };
-  });
-}
-
-function streamChunkText(chunk: unknown): string {
-  if (typeof chunk === 'string') return chunk;
-  if (chunk && typeof chunk === 'object') {
-    const obj = chunk as Record<string, unknown>;
-    const candidate = (obj.textDelta ?? obj.text ?? obj.content) as unknown;
-    if (typeof candidate === 'string') return candidate;
+/**
+ * Append the canary to the system message, or prepend one when the prompt has none.
+ * Applied directly to the SDK prompt rather than round-tripping through
+ * `AdapterMessage`, so file/image/tool parts survive untouched.
+ */
+function injectCanaryIntoPrompt(prompt: LanguageModelV2Prompt, token: string): LanguageModelV2Prompt {
+  const systemIndex = prompt.findIndex((m) => m.role === 'system');
+  if (systemIndex === -1) {
+    return [{ role: 'system', content: token }, ...prompt];
   }
-  return '';
+  return prompt.map((message, i) =>
+    i === systemIndex && message.role === 'system'
+      ? { ...message, content: `${message.content}\n\n${token}` }
+      : message,
+  );
+}
+
+/** Match the proxy's convention: parse the JSON argument string, keep the raw text if malformed. */
+function parseToolInput(input: string): unknown {
+  try {
+    return JSON.parse(input);
+  } catch {
+    return input;
+  }
+}
+
+function toolCallsFromContent(content: LanguageModelV2Content[]): ToolCall[] {
+  return content
+    .filter((part): part is Extract<LanguageModelV2Content, { type: 'tool-call' }> => part.type === 'tool-call')
+    .map((part) => ({
+      id: part.toolCallId,
+      name: part.toolName,
+      arguments: parseToolInput(part.input),
+    }));
 }
 
 /**
  * Vercel AI SDK `LanguageModelV2Middleware`. Pass the returned object to
- * `wrapLanguageModel({ model, middleware: palisadeMiddleware })`.
+ * `wrapLanguageModel({ model, middleware: createPalisadeMiddleware(adapter) })`.
  *
- *  - `transformParams`  — scan the incoming messages for injection; when clean,
- *    inject the canary token into the system prompt (canary enabled) and return
- *    the rewritten parameters. On a block verdict, throws `PalisadeBlockedError`.
- *  - `wrapGenerate`     — after the model completes, gate emitted tool calls
- *    against the Tier 3 policy; a hard-block verdict is surfaced as an error.
- *  - `wrapStream`       — scans the text stream for a leaked canary token; the
- *    request errors as soon as the token appears (exfiltration in streaming).
- *
- * The canary token is drawn with a time-limited window so a token rotated out
- * mid-stream is still recognized (CanaryStore grace period).
+ *  - `transformParams` — scans `params.prompt` for injection; on a clean verdict
+ *    injects the canary token into the system message and returns the rewritten
+ *    call options. A block verdict throws `PalisadeBlockedError` and the model is
+ *    never invoked.
+ *  - `wrapGenerate`    — gates `tool-call` parts in the result `content` array
+ *    against the Tier 3 policy.
+ *  - `wrapStream`      — pipes the provider stream through a `TransformStream` that
+ *    scans text deltas for a leaked canary and gates streamed tool calls, erroring
+ *    the stream the moment either fires.
  */
-export function createPalisadeMiddleware(adapter: PalisadeAdapter): PalisadeMiddleware {
+export function createPalisadeMiddleware(adapter: PalisadeAdapter): LanguageModelV2Middleware {
+  function gate(calls: ToolCall[]): PalisadeBlockedError | null {
+    if (calls.length === 0) return null;
+    const verdict = adapter.gateToolCalls(calls);
+    return verdict.blocked ? new PalisadeBlockedError(blockedToolCallBody(verdict.violations)) : null;
+  }
+
   return {
-    async transformParams({ params }) {
-      const input = params.input;
-      if (isPromptString(input)) {
-        const result = await adapter.guard({
-          messages: [{ role: 'user', content: input }],
-        });
-        if (result.blocked) throw new PalisadeBlockedError(result.blockedBody!);
-        return { ...params };
-      }
-      if (isMessagesShape(input)) {
-        const result = await adapter.guard({ messages: toAdapterMessages(input) });
-        if (result.blocked) throw new PalisadeBlockedError(result.blockedBody!);
-        return { ...params, input: fromAdapterMessages(result.body!) };
-      }
-      // Unrecognized shapes pass through — the SDK yields structured prompts.
-      return { ...params };
+    async transformParams({ params }): Promise<LanguageModelV2CallOptions> {
+      const result = await adapter.guard({ messages: promptToAdapterMessages(params.prompt) });
+      if (result.blocked) throw new PalisadeBlockedError(result.blockedBody!);
+
+      const token = adapter.canaryToken();
+      if (!token) return params;
+      return { ...params, prompt: injectCanaryIntoPrompt(params.prompt, token) };
     },
 
-    wrapGenerate({ doGenerate }) {
-      return async (params) => {
-        const response = (await doGenerate(params)) as { toolCalls?: unknown[] } | null;
-        const toolCalls = response?.toolCalls;
-        if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-          const calls = (toolCalls as Array<Record<string, unknown>>).map((tc) => ({
-            name: String(tc.name ?? ''),
-            arguments: tc.input ?? tc.arguments ?? {},
-          }));
-          const verdict = adapter.gateToolCalls(calls as never);
-          if (verdict.blocked) {
-            const blockedBody: BlockedResponse = {
-              error: {
-                type: 'prompt_injection_detected',
-                message: `Palisade blocked tool calls: ${verdict.violations
-                  .map((v) => `${v.tool} (${v.capabilities.join(', ')})`)
-                  .join('; ')}`,
-                verdict: 'block',
-                threatScore: 0,
-                requestId: '',
-              },
-            };
-            throw new PalisadeBlockedError(blockedBody);
-          }
-        }
-        return response;
-      };
+    async wrapGenerate({ doGenerate }) {
+      const result = await doGenerate();
+      const blocked = gate(toolCallsFromContent(result.content));
+      if (blocked) throw blocked;
+      return result;
     },
 
-    wrapStream({ doStream }) {
-      return (params) =>
-        (async function* guarded(): AsyncGenerator<unknown> {
-          const stream = (await doStream(params)) as AsyncIterable<unknown>;
-          const token = adapter.canaryToken();
-          // Rolling tail so a token split across chunk boundaries is caught.
-          let tail = '';
-          for await (const chunk of stream) {
-            tail = (tail + streamChunkText(chunk)).slice(-64);
-            if (token && tail.includes(token)) {
-              const blockedBody: BlockedResponse = {
-                error: {
-                  type: 'canary_detected',
-                  message: 'Palisade detected the canary token in the model output stream',
-                  verdict: 'block',
-                  threatScore: 1,
-                  requestId: '',
-                },
-              };
-              throw new PalisadeBlockedError(blockedBody);
+    async wrapStream({ doStream }) {
+      const { stream, ...rest } = await doStream();
+      const scanner = adapter.createCanaryScanner();
+
+      const guard = new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
+        transform(chunk, controller) {
+          if (chunk.type === 'text-delta') {
+            if (scanner.push(chunk.delta)) {
+              controller.error(new PalisadeBlockedError(canaryLeakBody()));
+              return;
             }
-            yield chunk;
+          } else if (chunk.type === 'tool-call') {
+            const blocked = gate([
+              { id: chunk.toolCallId, name: chunk.toolName, arguments: parseToolInput(chunk.input) },
+            ]);
+            if (blocked) {
+              controller.error(blocked);
+              return;
+            }
           }
-        })();
+          controller.enqueue(chunk);
+        },
+      });
+
+      return { stream: stream.pipeThrough(guard), ...rest };
     },
   };
 }
