@@ -187,7 +187,12 @@ export class CanaryTextScanner {
 
   /** Feed a text chunk; returns the matched token or null. */
   push(chunk: string): string | null {
-    this.window = (this.window + chunk).slice(-this.windowChars);
-    return this.store.findActiveToken(this.window);
+    // Scan the carry-over window PLUS the whole chunk: a provider that buffers can
+    // emit the token followed by more than `windowChars` of trailing text in one
+    // chunk, and truncating before the match would step right over it. Only the
+    // carry-over is trimmed, so cost stays proportional to the stream itself.
+    const haystack = this.window + chunk;
+    this.window = haystack.slice(-this.windowChars);
+    return this.store.findActiveToken(haystack);
   }
 }

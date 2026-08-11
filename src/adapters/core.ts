@@ -5,7 +5,7 @@ import type { ToolCall, BlockedResponse, ExtractedText } from '../types/proxy.js
 import type { EventLogger } from '../logging/events.js';
 import { DetectionEngine } from '../detection/engine.js';
 import { ResponseGate } from '../proxy/response-gate.js';
-import { CanaryStore, injectCanaryToken } from '../proxy/canary.js';
+import { CanaryStore, CanaryTextScanner, injectCanaryToken } from '../proxy/canary.js';
 import { OpenAIProvider } from '../proxy/providers/openai.js';
 
 /**
@@ -78,6 +78,16 @@ export class PalisadeAdapter {
   /** The current canary token (for tests / diagnostics), or null when disabled. */
   canaryToken(): string | null {
     return this.canaryStore.currentToken();
+  }
+
+  /**
+   * A streaming canary scanner bound to this adapter's token store. Adapters use
+   * this instead of hand-rolling a trailing window, so cross-chunk and mid-chunk
+   * detection stay identical to the proxy's (`CanaryTextScanner`), and a rotated
+   * token is still recognized through its grace period.
+   */
+  createCanaryScanner(): CanaryTextScanner {
+    return new CanaryTextScanner(this.canaryStore);
   }
 
   /**
