@@ -5,6 +5,7 @@ import { auditCommand } from './commands/audit.js';
 import { reportCommand } from './commands/report.js';
 import { claudeCommand } from './commands/claude.js';
 import { tier2Command } from './commands/tier2.js';
+import { benchmarkCommand } from './commands/benchmark.js';
 
 const program = new Command()
   .name('palisade')
@@ -17,5 +18,6 @@ program.addCommand(auditCommand);
 program.addCommand(reportCommand);
 program.addCommand(claudeCommand);
 program.addCommand(tier2Command);
+program.addCommand(benchmarkCommand);
 
 program.parse();

@@ -159,6 +159,43 @@ console.log(openclawConfigJson({ upstream: 'openai', proxyPort: 8340, model: 'gp
 // merge the output into OPENCLAW_CONFIG_PATH (~/.openclaw/openclaw.json)
 ```
 
+## Benchmark
+
+Numbers come from the **pre-registered** protocol in [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md),
+which fixed the corpora, split and metric set *before* any result was measured. Regenerate with
+`palisade benchmark --emit-env`; the full tables live in [`BENCHMARK.md`](BENCHMARK.md).
+
+Measured on corpus **C4** (`train_overlap: none` — the only contamination class permitted to source a
+headline number, §3), eval split of 168 entries, pinned seed `20260603`, Apple M3 / Node v22:
+
+| Configuration | FPR on benign | TNR on benign | Tier 2 firing rate | warm_p50 | warm_p95 | warm_p99 |
+|---|---|---|---|---|---|---|
+| `tier1` | 1.69% | 98.31% | 0.00% | 0.01 ms | 0.06 ms | 2.09 ms |
+| `tier1+2` | 1.69% | 98.31% | 4.17% | 0.01 ms | 0.08 ms | 35.34 ms |
+| `tier1+2+3` | 1.69% | 98.31% | 4.17% | 0.01 ms | 2.01 ms | 27.70 ms |
+
+Per-category recall on `tier1+2+3` — precision is 1.0000 in every attack category, so these are
+misses, not false alarms:
+
+| Category | Recall | F1 | Support |
+|---|---|---|---|
+| role_marker | 0.9375 | 0.9677 | 16 |
+| encoded_payload | 0.8276 | 0.9057 | 29 |
+| delimiter_escape | 0.6250 | 0.7692 | 16 |
+| exfiltration | 0.5417 | 0.7027 | 24 |
+| override_phrase | 0.3750 | 0.5455 | 24 |
+
+**Read these honestly.** Recall on `override_phrase` is 0.3750 — the cascade misses most reworded
+override attacks. Tier 2 only sees the 4.17% of inputs landing in the ambiguous band, so it shifts
+end-to-end paraphrase consistency by roughly one point (0.6490 → 0.6573). That is *not* the 0.978
+figure in [`docs/tier2-bakeoff.md`](docs/tier2-bakeoff.md): that gate scored the Tier 2 model in
+isolation over the whole corpus, and the two are not comparable. The ~1.7% false-positive rate is
+the number to weigh against those misses.
+
+**Not yet measured** (protocol §2/§5): corpora C1–C3 (deepset, Lakera gandalf, AgentDojo) are not
+yet fetched or sha-pinned, and the 1-hour soak-test RSS slope has not been run. Those rows are
+absent from `BENCHMARK.md` rather than estimated.
+
 ## Architecture
 
 ```
@@ -223,7 +260,7 @@ Palisade is **not** a replacement for infrastructure sandboxing. Use it _alongsi
 ## Roadmap
 
 - [x] **v0.1** — Tier 1 pattern engine + proxy mode + CLI (`palisade serve`, `palisade scan`)
-- [x] **v0.2** — Tier 2 ML classifier (ONNX, CPU-only) wired into the cascade; benchmark suite in progress
+- [x] **v0.2** — Tier 2 ML classifier (ONNX, CPU-only) wired into the cascade; benchmark suite shipped (see [Benchmark](#benchmark))
 - [x] **v0.3** — Tier 3 behavioral policy engine (YAML capability manifests) + response-side action gate
 - [x] **v0.4** — Canary token injection + exfiltration anomaly detection
 - [x] **v0.5** — Dashboard + event log + skill trust scoring

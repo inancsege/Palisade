@@ -1,0 +1,11 @@
+{
+  "palisade": "0.1.0",
+  "node": "v22.20.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "cpuModel": "Apple M3",
+  "cpus": 8,
+  "totalMemoryBytes": 17179869184,
+  "onnxruntimeNode": "1.21.0",
+  "transformersJs": "3.8.1"
+}
