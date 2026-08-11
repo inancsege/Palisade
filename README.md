@@ -71,18 +71,19 @@ on the dashboard scoreboard — the signal for disabling or re-reviewing them.
 
 ## Supported Frameworks
 
-| Framework | Integration Method |
-|---|---|
-| **OpenClaw** | Gateway middleware (intercepts before LLM routing) |
-| **LangGraph / LangChain** | Runnable wrapper around ChatModel |
-| **CrewAI** | Agent callback hook |
-| **Vercel AI SDK** | Middleware function |
-| **Direct API** | HTTP proxy mode (point your base URL at Palisade) |
-| **Any agent** | Standalone proxy — swap your API base URL |
+| Framework | Integration Method | In-process guard? |
+|---|---|---|
+| **Vercel AI SDK** | `LanguageModelV2Middleware` | ✅ full — request scan, canary, tool-call gate (generate + stream) |
+| **LangGraph / LangChain** | `BaseChatModel` proxy wrapper | ✅ request scan, canary, tool-call gate on `invoke`; streamed tool calls not gated |
+| **OpenClaw** | Gateway routing preset (`openclaw.json`) | ➖ via proxy — OpenClaw exposes no pre-LLM hook |
+| **CrewAI** | Gateway routing preset (Python) | ➖ via proxy — CrewAI is Python-only; a JS `kickoff` guard exists for the unofficial TS ports |
+| **Direct API / any agent** | HTTP proxy mode — swap your base URL | ✅ full |
 
-> **Available today:** the **HTTP proxy mode** works with any framework or direct API call, and the
-> **v1.0 framework adapters** (Vercel AI SDK middleware, LangGraph/LangChain model wrapper, CrewAI
-> kickoff guard, OpenClaw gateway preset) are implemented — see `src/adapters/`.
+> **Verified against the real SDKs.** The Vercel and LangChain adapters are tested through the
+> actual `ai` and `@langchain/core` packages (`test/unit/adapters/`), and `npm run
+> typecheck:adapters` fails if either framework's published contract drifts from what Palisade
+> implements. `ai`/`@langchain/core` are **optional peer dependencies** — nothing is imported at
+> runtime unless you use that adapter.
 
 The simplest integration requires zero framework changes — run Palisade as a local proxy server and point your `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL` at it:
 
@@ -115,7 +116,24 @@ import { ChatOpenAI } from '@langchain/openai';
 const llm = wrapLangChainModel(new ChatOpenAI({ model: 'gpt-4o' }), new PalisadeAdapter({ policy: defaultPolicy }));
 ```
 
-### CrewAI (kickoff guard)
+### CrewAI (gateway routing)
+
+CrewAI is a **Python** framework, so the supported integration is routing its LLM through
+`palisade serve`. Generate the environment (both `*_BASE_URL` and `*_API_BASE` are set, because
+CrewAI 1.12.x does not map `base_url` onto LiteLLM's `api_base` — [crewAI#5139](https://github.com/crewAIInc/crewAI/issues/5139)):
+
+```js
+import { buildCrewAIEnv, crewAILlmSnippet } from '@inancsege/palisade';
+
+buildCrewAIEnv({ upstream: 'openai', proxyPort: 8340 });
+// → { OPENAI_BASE_URL: 'http://127.0.0.1:8340/v1', OPENAI_API_BASE: '…', OPENAI_API_KEY: '…' }
+
+console.log(crewAILlmSnippet({ upstream: 'openai', model: 'gpt-4o' })); // ready-to-paste Python
+```
+
+For the unofficial TypeScript ports (`crewai-ts` and friends), `wrapCrewAI` guards `kickoff()`
+in-process — it scans every string leaf in the input dict and appends the canary to
+`task_description`:
 
 ```ts
 import { PalisadeAdapter, wrapCrewAI } from '@inancsege/palisade';
@@ -124,18 +142,21 @@ const guardedCrew = wrapCrewAI(myCrew, new PalisadeAdapter({ policy: defaultPoli
 await guardedCrew.kickoff({ task_description: 'Summarize the incident notes' });
 ```
 
-### OpenClaw (gateway preset)
+### OpenClaw (gateway routing)
 
 ```bash
 palisade serve --port 8340 --upstream https://api.openai.com/v1
 ```
 
-OpenClaw has no pre-LLM hook, so the preset routes its model connection through `palisade serve`. Build the config object in code or render a `connections.yaml` fragment:
+OpenClaw has no pre-LLM hook, so the preset routes a model provider through `palisade serve`.
+It emits the shape OpenClaw actually reads — a JSON5 config at `~/.openclaw/openclaw.json`
+(override with `OPENCLAW_CONFIG_PATH`) with providers nested under `models.providers.<id>`:
 
 ```js
-import { buildOpenClawPreset, openclawYaml } from '@inancsege/palisade';
-const preset = buildOpenClawPreset({ provider: 'openai', proxyPort: 8340, model: 'gpt-4o', apiKey: process.env.OPENAI_API_KEY });
-// paste `openclawYaml({...})` under the `connections:` key in ~/.openclaw/connections.yaml
+import { openclawConfigJson, OPENCLAW_CONFIG_PATH } from '@inancsege/palisade';
+
+console.log(openclawConfigJson({ upstream: 'openai', proxyPort: 8340, model: 'gpt-4o' }));
+// merge the output into OPENCLAW_CONFIG_PATH (~/.openclaw/openclaw.json)
 ```
 
 ## Architecture
