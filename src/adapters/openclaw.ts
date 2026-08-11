@@ -1,93 +1,118 @@
 /**
  * OpenClaw integration preset (T6-05).
  *
- * OpenClaw proxies every LLM interaction through a per-connection gateway, but
- * offers no pre-LLM message-hook for injecting prompt-injection guards. The
- * Palisade OpenClaw strategy is therefore *gateway routing*: point OpenClaw's
- * model connection at the running Palisade proxy (`palisade serve`). The proxy
- * forwards upstream after scanning, so OpenClaw crews get detection and canary
- * protection without plugin hooks.
+ * OpenClaw proxies every LLM interaction through a per-connection gateway but offers no
+ * pre-LLM message hook for injecting prompt-injection guards. The Palisade strategy is
+ * therefore *gateway routing*: point an OpenClaw model provider at the running Palisade
+ * proxy (`palisade serve`). The proxy scans, injects the canary and forwards upstream, so
+ * OpenClaw agents get protection without plugin hooks.
  *
- * This module builds the OpenClaw connection config object and a ready-to-paste
- * `connections.yaml` fragment. OpenClaw reads the proxy as a drop-in substitute
- * for the real provider because the proxy forwards every path upstream.
+ * This module builds that provider entry in the shape OpenClaw actually reads: an optional
+ * JSON5 config at `~/.openclaw/openclaw.json` (override with `OPENCLAW_CONFIG_PATH`), with
+ * providers nested under `models.providers.<id>` using camelCase keys and an `api`
+ * discriminator. See https://docs.openclaw.ai/gateway/configuration and
+ * https://docs.openclaw.ai/concepts/model-providers.
  */
 
-export type OpenClawProvider = 'openai' | 'anthropic';
+/** Which upstream wire protocol the Palisade proxy is forwarding to. */
+export type OpenClawUpstream = 'openai' | 'anthropic';
+
+/** OpenClaw's `api` discriminator for a provider entry. */
+export type OpenClawApi = 'openai-completions' | 'anthropic-messages';
 
 export interface OpenClawPresetOptions {
-  provider: OpenClawProvider;
-  /** Palisade proxy origin host (paired with `proxyPort`). */
+  /** Upstream wire protocol behind the proxy. */
+  upstream: OpenClawUpstream;
+  /** Palisade proxy host (paired with `proxyPort`). Defaults to `127.0.0.1`. */
   proxyHost?: string;
-  /** Palisade proxy origin port (paired with `proxyHost`). */
+  /** Palisade proxy port (paired with `proxyHost`). Defaults to `8340`. */
   proxyPort?: number;
-  /** Full Palisade proxy origin, e.g. `http://localhost:8340` (overrides host/port). */
+  /** Full proxy origin, e.g. `http://localhost:8340` — overrides host/port. */
   baseUrl?: string;
   /** Upstream model id OpenClaw should request. */
   model?: string;
-  /** Pass-through API key for the upstream provider. */
+  /** Display name for the model entry. Defaults to the model id. */
+  modelName?: string;
+  /** Pass-through API key for the upstream provider. Supports `${ENV_VAR}` form. */
   apiKey?: string;
 }
 
-export interface OpenClawPreset {
-  provider_id: string;
-  base_url: string;
-  model: string;
-  api_key: string;
+export interface OpenClawModelEntry {
+  id: string;
+  name: string;
 }
+
+export interface OpenClawProviderEntry {
+  baseUrl: string;
+  apiKey: string;
+  api: OpenClawApi;
+  models: OpenClawModelEntry[];
+}
+
+export interface OpenClawConfig {
+  agents: { defaults: { model: { primary: string } } };
+  models: { providers: Record<string, OpenClawProviderEntry> };
+}
+
+/** The JSON5 config file OpenClaw reads (override with `OPENCLAW_CONFIG_PATH`). */
+export const OPENCLAW_CONFIG_PATH = '~/.openclaw/openclaw.json';
+
+/** The provider id Palisade registers itself under. */
+export const OPENCLAW_PROVIDER_ID = 'palisade';
 
 const DEFAULT_OPENAI_MODEL = 'gpt-4o';
-const PATH_OPENAI = '/v1';
-const PATH_ANTHROPIC = '';
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4';
 
-/** Resolve the proxy origin from explicit parts or the full baseUrl. */
-function resolveOrigin(options: OpenClawPresetOptions): string {
-  const base = options.baseUrl?.replace(/\/$/, '');
-  if (base) return base;
-  const port = options.proxyPort ?? 8340;
-  return `http://${options.proxyHost ?? '127.0.0.1'}:${port}`;
+/** Trim trailing slashes without a backtracking regex (redos/no-vulnerable). */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47 /* '/' */) end--;
+  return value.slice(0, end);
 }
 
-function apiKeyOrPlaceholder(apiKey?: string): string {
-  return apiKey ?? 'sk-palisade-proxy';
+/** Resolve the proxy origin from explicit parts or a full baseUrl. */
+function resolveOrigin(options: OpenClawPresetOptions): string {
+  const base = options.baseUrl === undefined ? undefined : stripTrailingSlashes(options.baseUrl);
+  if (base) return base;
+  return `http://${options.proxyHost ?? '127.0.0.1'}:${options.proxyPort ?? 8340}`;
 }
 
 /**
- * Build an OpenClaw connection preset. The result is shaped like an OpenClaw
- * `connections` entry: `provider_id`, `base_url`, `model`, `api_key`. Routing
- * through Palisade, OpenClaw's requests first hit `palisade serve`, which scans
- * for injection and injects/validates the canary token before forwarding.
+ * Build the `models.providers.palisade` entry pointing OpenClaw at the Palisade proxy.
+ * OpenAI-compatible upstreams expect the `/v1` suffix; the Anthropic messages API is
+ * addressed at the bare origin.
  */
-export function buildOpenClawPreset(options: OpenClawPresetOptions): OpenClawPreset {
+export function buildOpenClawProvider(options: OpenClawPresetOptions): OpenClawProviderEntry {
   const origin = resolveOrigin(options);
-  if (options.provider === 'anthropic') {
-    return {
-      provider_id: 'anthropic',
-      base_url: `${origin}${PATH_ANTHROPIC}`,
-      model: options.model ?? 'claude-sonnet-4',
-      api_key: apiKeyOrPlaceholder(options.apiKey),
-    };
-  }
+  const anthropic = options.upstream === 'anthropic';
+  const model = options.model ?? (anthropic ? DEFAULT_ANTHROPIC_MODEL : DEFAULT_OPENAI_MODEL);
+
   return {
-    provider_id: 'openai_compatible',
-    base_url: `${origin}${PATH_OPENAI}`,
-    model: options.model ?? DEFAULT_OPENAI_MODEL,
-    api_key: apiKeyOrPlaceholder(options.apiKey),
+    baseUrl: anthropic ? origin : `${origin}/v1`,
+    apiKey: options.apiKey ?? 'sk-palisade-proxy',
+    api: anthropic ? 'anthropic-messages' : 'openai-completions',
+    models: [{ id: model, name: options.modelName ?? model }],
   };
 }
 
 /**
- * Render a minimal OpenClaw `connections.yaml` fragment. Drop it under the
- * `connections:` key in `~/.openclaw/connections.yaml` (or a project config).
+ * Build the config fragment to merge into `~/.openclaw/openclaw.json`: the Palisade
+ * provider plus the `provider/model` default-model selection that routes agents through it.
  */
-export function openclawYaml(options: OpenClawPresetOptions): string {
-  const preset = buildOpenClawPreset(options);
-  return [
-    '  palisade_proxy:',
-    `    provider_id: ${preset.provider_id}`,
-    `    base_url: ${preset.base_url}`,
-    `    api_key: ${preset.api_key}`,
-    `    model: ${preset.model}`,
-    '    # Palisade routes this connection through palisade serve (prompt-injection scan + canary).',
-  ].join('\n');
+export function buildOpenClawConfig(options: OpenClawPresetOptions): OpenClawConfig {
+  const provider = buildOpenClawProvider(options);
+  const modelId = provider.models[0].id;
+
+  return {
+    agents: { defaults: { model: { primary: `${OPENCLAW_PROVIDER_ID}/${modelId}` } } },
+    models: { providers: { [OPENCLAW_PROVIDER_ID]: provider } },
+  };
+}
+
+/**
+ * Render the config fragment as JSON, ready to merge into `~/.openclaw/openclaw.json`.
+ * OpenClaw parses JSON5, which is a superset of JSON, so plain JSON is always valid there.
+ */
+export function openclawConfigJson(options: OpenClawPresetOptions): string {
+  return JSON.stringify(buildOpenClawConfig(options), null, 2);
 }

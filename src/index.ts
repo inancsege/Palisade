@@ -24,8 +24,15 @@ export {
   type CrewAILike,
 } from './adapters/crewai.js';
 export {
-  buildOpenClawPreset,
-  openclawYaml,
-  type OpenClawPreset,
+  OPENCLAW_CONFIG_PATH,
+  OPENCLAW_PROVIDER_ID,
+  buildOpenClawProvider,
+  buildOpenClawConfig,
+  openclawConfigJson,
+  type OpenClawApi,
+  type OpenClawConfig,
+  type OpenClawModelEntry,
   type OpenClawPresetOptions,
+  type OpenClawProviderEntry,
+  type OpenClawUpstream,
 } from './adapters/openclaw.js';
