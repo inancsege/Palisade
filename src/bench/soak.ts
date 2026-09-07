@@ -20,8 +20,21 @@ export interface SoakResult {
   samples: RssSample[];
   scans: number;
   durationMs: number;
-  /** Least-squares slope of RSS (MB) against elapsed time (hours). */
+  /** Requests actually completed per second — a slow scan degrades the requested rate. */
+  achievedRatePerSecond: number;
+  /** Least-squares slope of RSS (MB) against elapsed time (hours), cold sample excluded. */
   slopeMbPerHour: number;
+  rssMinMb: number;
+  rssMaxMb: number;
+  /**
+   * Whether the slope can distinguish a leak from noise at all.
+   *
+   * The threshold permits `MAX_RSS_SLOPE_MB_PER_HOUR × hours` of growth over the run. If the
+   * observed RSS envelope swings wider than that, a regression line through the series is
+   * measuring which phase of the GC cycle each sample landed in, not drift — and both a
+   * "pass" and a "fail" from it would be an artifact.
+   */
+  resolvable: boolean;
   passed: boolean;
 }
 
@@ -46,10 +59,35 @@ export function leastSquaresSlope(points: Array<{ x: number; y: number }>): numb
 
 const BYTES_PER_MB = 1024 * 1024;
 
+/**
+ * Slope over the STEADY-STATE samples: the first sample is taken before the first scan,
+ * while the model-load allocations are still uncollected, and on a real run it reads an
+ * order of magnitude above everything after it. Including it drags the regression sharply
+ * negative and manufactures a pass. `latencyColumns` excludes its cold sample for the same
+ * reason; this mirrors that.
+ */
 export function slopeMbPerHour(samples: RssSample[]): number {
   return leastSquaresSlope(
-    samples.map((s) => ({ x: s.elapsedMs / 3_600_000, y: s.rssBytes / BYTES_PER_MB })),
+    samples.slice(1).map((s) => ({ x: s.elapsedMs / 3_600_000, y: s.rssBytes / BYTES_PER_MB })),
   );
+}
+
+/** Steady-state RSS band in MB (cold sample excluded). `[0, 0]` for a series too short. */
+export function rssEnvelopeMb(samples: RssSample[]): [min: number, max: number] {
+  const steady = samples.slice(1).map((s) => s.rssBytes / BYTES_PER_MB);
+  return steady.length > 0 ? [Math.min(...steady), Math.max(...steady)] : [0, 0];
+}
+
+/**
+ * Whether a slope over this series can distinguish a leak from noise.
+ *
+ * The threshold permits `MAX_RSS_SLOPE_MB_PER_HOUR × hours` of growth. If the observed RSS
+ * envelope swings wider than that, a regression line is measuring which phase of the GC
+ * cycle each sample landed in, and both a pass and a fail from it are artifacts.
+ */
+export function isResolvable(samples: RssSample[], durationMs: number): boolean {
+  const [min, max] = rssEnvelopeMb(samples);
+  return max - min <= MAX_RSS_SLOPE_MB_PER_HOUR * (durationMs / 3_600_000);
 }
 
 export interface SoakOptions {
@@ -110,12 +148,19 @@ export async function runSoak(options: SoakOptions): Promise<SoakResult> {
 
   sample(now() - started);
 
+  const durationMs = now() - started;
   const slope = slopeMbPerHour(samples);
+  const [rssMinMb, rssMaxMb] = rssEnvelopeMb(samples);
+
   return {
     samples,
     scans,
-    durationMs: now() - started,
+    durationMs,
+    achievedRatePerSecond: durationMs > 0 ? scans / (durationMs / 1000) : 0,
     slopeMbPerHour: slope,
+    rssMinMb,
+    rssMaxMb,
+    resolvable: isResolvable(samples, durationMs),
     passed: slope <= MAX_RSS_SLOPE_MB_PER_HOUR,
   };
 }

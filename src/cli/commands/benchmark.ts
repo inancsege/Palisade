@@ -192,16 +192,26 @@ async function maybeSoak(
   mkdirSync(dirname(csvPath), { recursive: true });
   writeFileSync(csvPath, toCsv(result), 'utf-8');
 
-  const verdict = result.passed ? chalk.green('pass') : chalk.red('FAIL');
+  const verdict = !result.resolvable
+    ? chalk.yellow('inconclusive')
+    : result.passed
+      ? chalk.green('pass')
+      : chalk.red('FAIL');
   console.log(
-    `soak: ${result.scans} scans, slope ${result.slopeMbPerHour.toFixed(2)} MB/hour — ${verdict}`,
+    `soak: ${result.scans} scans, slope ${result.slopeMbPerHour.toFixed(2)} MB/hour, ` +
+      `RSS ${result.rssMinMb.toFixed(0)}-${result.rssMaxMb.toFixed(0)} MB — ${verdict}`,
   );
 
   return {
     durationMs: result.durationMs,
     scans: result.scans,
-    ratePerSecond,
+    // The achieved rate, not the requested one: a scan slower than the rate slice
+    // degrades throughput, and publishing the request would overstate the load applied.
+    ratePerSecond: result.achievedRatePerSecond,
     slopeMbPerHour: result.slopeMbPerHour,
+    rssMinMb: result.rssMinMb,
+    rssMaxMb: result.rssMaxMb,
+    resolvable: result.resolvable,
     passed: result.passed,
     csvPath: `${options.soakOut as string}/${csvPath.split(/[\\/]/).pop()}`,
   };

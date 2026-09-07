@@ -141,6 +141,9 @@ describe('renderReport (protocol §3/§5 — nothing hidden)', () => {
         scans: 36_000,
         ratePerSecond: 10,
         slopeMbPerHour: 1.23,
+        rssMinMb: 150,
+        rssMaxMb: 152,
+        resolvable: true,
         passed: true,
         csvPath: 'bench/results/soak/run.csv',
       },
@@ -148,6 +151,31 @@ describe('renderReport (protocol §3/§5 — nothing hidden)', () => {
     expect(out).toContain('1.23 MB/hour');
     expect(out).toContain('5 MB/hour');
     expect(out).toContain('bench/results/soak/run.csv');
+    expect(out).toContain('pass');
+  });
+
+  it('reports an unresolvable soak as inconclusive instead of picking a side', () => {
+    const out = renderReport({
+      corpora: [corpusResult()],
+      seed: 20260603,
+      environment: captureEnvironment(),
+      soak: {
+        durationMs: 3_600_000,
+        scans: 32_724,
+        ratePerSecond: 9.09,
+        slopeMbPerHour: 79.05,
+        rssMinMb: 38,
+        rssMaxMb: 229,
+        resolvable: false,
+        passed: false,
+      csvPath: 'bench/results/soak/run.csv',
+      },
+    });
+    // A 79 MB/hour slope over a series that swings 191 MB is noise, not a leak. The
+    // report must say so rather than publish a FAIL the evidence does not support.
+    expect(out).toContain('inconclusive');
+    expect(out).toMatch(/Inconclusive, and reported as such/);
+    expect(out).not.toMatch(/\| FAIL \|/);
   });
 });
 

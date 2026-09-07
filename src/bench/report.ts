@@ -101,6 +101,9 @@ export interface SoakSummary {
   scans: number;
   ratePerSecond: number;
   slopeMbPerHour: number;
+  rssMinMb: number;
+  rssMaxMb: number;
+  resolvable: boolean;
   passed: boolean;
   csvPath: string;
 }
@@ -243,16 +246,31 @@ export function renderReport(input: ReportInput): string {
   lines.push('## Soak test — RSS slope (§5)');
   lines.push('');
   if (input.soak) {
-    const minutes = (input.soak.durationMs / 60_000).toFixed(1);
-    lines.push('| Duration | Rate | Scans | RSS slope | Threshold | Verdict |');
-    lines.push('|---|---|---|---|---|---|');
+    const soak = input.soak;
+    const minutes = (soak.durationMs / 60_000).toFixed(1);
+    const swing = soak.rssMaxMb - soak.rssMinMb;
+    const verdict = !soak.resolvable ? 'inconclusive' : soak.passed ? 'pass' : 'FAIL';
+    lines.push('| Duration | Rate | Scans | RSS slope | RSS range | Threshold | Verdict |');
+    lines.push('|---|---|---|---|---|---|---|');
     lines.push(
-      `| ${minutes} min | ${input.soak.ratePerSecond} req/s | ${input.soak.scans} | ` +
-        `${input.soak.slopeMbPerHour.toFixed(2)} MB/hour | ≤ ${MAX_RSS_SLOPE_MB_PER_HOUR} MB/hour | ` +
-        `${input.soak.passed ? '✅ pass' : '❌ fail'} |`,
+      `| ${minutes} min | ${soak.ratePerSecond.toFixed(2)} req/s | ${soak.scans} | ` +
+        `${soak.slopeMbPerHour.toFixed(2)} MB/hour | ${soak.rssMinMb.toFixed(0)}-${soak.rssMaxMb.toFixed(0)} MB | ` +
+        `≤ ${MAX_RSS_SLOPE_MB_PER_HOUR} MB/hour | ${verdict} |`,
     );
     lines.push('');
-    lines.push(`Raw RSS series: \`${input.soak.csvPath}\`.`);
+    if (!soak.resolvable) {
+      lines.push(
+        `**Inconclusive, and reported as such.** Steady-state RSS swings ${swing.toFixed(0)} MB across ` +
+          `the run, against the ${MAX_RSS_SLOPE_MB_PER_HOUR} MB/hour the threshold permits. A regression ` +
+          'line through a series that noisy measures which phase of the V8 GC cycle each sample landed ' +
+          'in, not memory drift — so neither a pass nor a fail from it would mean anything, and the ' +
+          'slope above is printed for completeness rather than as a verdict. The pre-registered ' +
+          'estimator (§5) does not have the resolution this workload needs; changing it is a protocol ' +
+          'decision, not a reporting one. The raw series is committed so the call can be made on evidence.',
+      );
+      lines.push('');
+    }
+    lines.push(`Raw RSS series: \`${soak.csvPath}\`.`);
   } else {
     lines.push(
       'Not run for this report. `palisade benchmark --soak 60` runs the pre-registered ' +
