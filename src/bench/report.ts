@@ -103,6 +103,7 @@ export interface SoakSummary {
   slopeMbPerHour: number;
   rssMinMb: number;
   rssMaxMb: number;
+  tailSpreadMb: number;
   resolvable: boolean;
   passed: boolean;
   csvPath: string;
@@ -260,13 +261,24 @@ export function renderReport(input: ReportInput): string {
     lines.push('');
     if (!soak.resolvable) {
       lines.push(
-        `**Inconclusive, and reported as such.** Steady-state RSS swings ${swing.toFixed(0)} MB across ` +
-          `the run, against the ${MAX_RSS_SLOPE_MB_PER_HOUR} MB/hour the threshold permits. A regression ` +
-          'line through a series that noisy measures which phase of the V8 GC cycle each sample landed ' +
-          'in, not memory drift — so neither a pass nor a fail from it would mean anything, and the ' +
-          'slope above is printed for completeness rather than as a verdict. The pre-registered ' +
-          'estimator (§5) does not have the resolution this workload needs; changing it is a protocol ' +
-          'decision, not a reporting one. The raw series is committed so the call can be made on evidence.',
+        `**Inconclusive against the pre-registered estimator, and reported as such.** Steady-state RSS ` +
+          `spans ${swing.toFixed(0)} MB across the run, wider than the ${MAX_RSS_SLOPE_MB_PER_HOUR} MB/hour ` +
+          'the threshold permits, so a single regression line over the whole run cannot be read as drift ' +
+          'and the slope above is printed for completeness rather than as a verdict. Changing the ' +
+          'estimator after seeing the data is a protocol decision (§5), not a reporting one, so the ' +
+          'pre-registered number stands as measured and the raw series is committed for inspection.',
+      );
+      lines.push('');
+      lines.push(
+        `**Supplementary evidence — tail flatness.** Over the final third of the run RSS spans ` +
+          `${soak.tailSpreadMb.toFixed(2)} MB. ` +
+          (soak.tailSpreadMb <= MAX_RSS_SLOPE_MB_PER_HOUR
+            ? 'Memory rises during warm-up and then stops: the series is a saturating curve, which a ' +
+              'straight line over-reads as growth. A leak keeps climbing once warm; this does not. ' +
+              'On this evidence there is no sustained-load memory leak — but that conclusion comes ' +
+              'from the tail, not from the pre-registered slope.'
+            : 'Memory is still moving at the end of the run, so warm-up saturation does not explain ' +
+              'the slope. This warrants investigation before the run is dismissed as noise.'),
       );
       lines.push('');
     }

@@ -4,6 +4,8 @@ import {
   isResolvable,
   leastSquaresSlope,
   rssEnvelopeMb,
+  tailSpreadMb,
+  fromCsv,
   runSoak,
   slopeMbPerHour,
   toCsv,
@@ -98,6 +100,38 @@ describe('rssEnvelopeMb / isResolvable (§5 resolution check)', () => {
   });
 });
 
+describe('tailSpreadMb (supplementary evidence)', () => {
+  const ONE_HOUR = 3_600_000;
+  const at = (minutes: number, mb: number) => sample(minutes * 60_000, mb);
+
+  it('reports a flat tail as near-zero for a curve that saturates', () => {
+    // The measured run: rises 1196 -> 1214.5 MB over 35 min, then holds. A straight line
+    // over the whole hour reads +22.85 MB/hour; the tail says growth already stopped.
+    const saturating = [
+      at(0, 1923),
+      at(5, 1196),
+      at(20, 1206),
+      at(35, 1214.5),
+      at(45, 1214.6),
+      at(55, 1214.5),
+      at(60, 1214.6),
+    ];
+    expect(tailSpreadMb(saturating, ONE_HOUR)).toBeLessThan(1);
+    // ...while the whole-run slope over-reads that same series as growth.
+    expect(slopeMbPerHour(saturating)).toBeGreaterThan(MAX_RSS_SLOPE_MB_PER_HOUR);
+  });
+
+  it('reports a wide tail for a series still climbing at the end', () => {
+    const leaking = [at(0, 1900), at(20, 100), at(45, 200), at(55, 300), at(60, 400)];
+    expect(tailSpreadMb(leaking, ONE_HOUR)).toBeGreaterThan(MAX_RSS_SLOPE_MB_PER_HOUR);
+  });
+
+  it('returns 0 when the tail has too few samples to have a spread', () => {
+    expect(tailSpreadMb([], ONE_HOUR)).toBe(0);
+    expect(tailSpreadMb([at(0, 100), at(60, 200)], ONE_HOUR)).toBe(0);
+  });
+});
+
 describe('runSoak', () => {
   it('drives the scanner at the requested rate and samples RSS across the run', async () => {
     let clock = 0;
@@ -174,5 +208,52 @@ describe('runSoak', () => {
     expect(csv[0]).toBe('elapsed_ms,rss_bytes,rss_mb,scans');
     expect(csv.length).toBe(result.samples.length + 1);
     expect(csv[1].split(',')).toHaveLength(4);
+  });
+});
+
+describe('fromCsv (re-derive a published row without re-measuring)', () => {
+  it('round-trips a result through the CSV it wrote', async () => {
+    let clock = 0;
+    const measured = await runSoak({
+      scan: async () => {
+        clock += 100;
+      },
+      durationMs: 5000,
+      ratePerSecond: 10,
+      sampleEveryMs: 1000,
+      now: () => clock,
+    });
+
+    // The series is the evidence. Every published figure must be derivable from it, or
+    // correcting how a soak is REPORTED would mean paying for the hour of measurement twice.
+    const rebuilt = fromCsv(toCsv(measured));
+    expect(rebuilt.samples.length).toBe(measured.samples.length);
+    expect(rebuilt.scans).toBe(measured.scans);
+    expect(rebuilt.durationMs).toBe(measured.durationMs);
+    expect(rebuilt.slopeMbPerHour).toBeCloseTo(measured.slopeMbPerHour, 6);
+    expect(rebuilt.rssMinMb).toBeCloseTo(measured.rssMinMb, 2);
+    expect(rebuilt.rssMaxMb).toBeCloseTo(measured.rssMaxMb, 2);
+    expect(rebuilt.resolvable).toBe(measured.resolvable);
+    expect(rebuilt.passed).toBe(measured.passed);
+  });
+
+  it('re-derives the verdict from a hand-written series', () => {
+    const csv = [
+      'elapsed_ms,rss_bytes,rss_mb,scans',
+      `0,${1900 * 1024 * 1024},1900.00,0`,
+      `1800000,${150 * 1024 * 1024},150.00,18000`,
+      `3600000,${151 * 1024 * 1024},151.00,36000`,
+      '',
+    ].join('\n');
+
+    const result = fromCsv(csv);
+    expect(result.scans).toBe(36000);
+    expect(result.durationMs).toBe(3_600_000);
+    expect(result.achievedRatePerSecond).toBeCloseTo(10, 2);
+    // Cold sample excluded, so the fit is over the two steady points: +1 MB across the
+    // half-hour between them = 2 MB/hour, under the gate.
+    expect(result.slopeMbPerHour).toBeCloseTo(2, 6);
+    expect(result.resolvable).toBe(true);
+    expect(result.passed).toBe(true);
   });
 });

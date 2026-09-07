@@ -163,18 +163,28 @@ console.log(openclawConfigJson({ upstream: 'openai', proxyPort: 8340, model: 'gp
 
 Numbers come from the **pre-registered** protocol in [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md),
 which fixed the corpora, split and metric set *before* any result was measured. Regenerate with
-`palisade benchmark --emit-env`; the full tables live in [`BENCHMARK.md`](BENCHMARK.md).
+`npm run benchmark`; the full per-corpus tables live in [`BENCHMARK.md`](BENCHMARK.md).
 
-Measured on corpus **C4** (`train_overlap: none` — the only contamination class permitted to source a
-headline number, §3), eval split of 168 entries, pinned seed `20260603`, Apple M3 / Node v22:
+All four registered corpora, eval splits only, pinned seed `20260603`, Windows / i7-12700H / Node v24:
 
-| Configuration | FPR on benign | TNR on benign | Tier 2 firing rate | warm_p50 | warm_p95 | warm_p99 |
+| Corpus | Source | train_overlap | Eval | Recall (`tier1+2+3`) | Precision | FPR on benign |
 |---|---|---|---|---|---|---|
-| `tier1` | 1.69% | 98.31% | 0.00% | 0.01 ms | 0.06 ms | 2.09 ms |
-| `tier1+2` | 1.69% | 98.31% | 4.17% | 0.01 ms | 0.08 ms | 35.34 ms |
-| `tier1+2+3` | 1.69% | 98.31% | 4.17% | 0.01 ms | 2.01 ms | 27.70 ms |
+| **C4** | repo-authored held-out | **none** | 168 | 0.6514 | 1.0000 | 1.69% |
+| C3 | AgentDojo `important_instructions` | none (unverified) | 82 | 0.3333 | 1.0000 | 1.64% |
+| C2 | Lakera `gandalf_ignore_instructions` | **partial — contaminated** | 150 | 0.2935 | 1.0000 | 0.00% |
+| C1 | deepset `prompt-injections` | **partial — contaminated** | 93 | 0.1000 | 1.0000 | 0.00% |
 
-Per-category recall on `tier1+2+3` — precision is 1.0000 in every attack category, so these are
+C1 and C2 are public corpora the Tier 2 model was very likely trained on, so their rows are an
+**in-distribution** result and never a headline. Only C4 (and, weakly, C3) is `train_overlap: none`.
+
+**Tier 2 currently earns very little.** Across all four corpora it fires on 4.17% / 8.54% / 0.00% /
+2.15% of inputs (C4/C3/C2/C1) and changes exactly **one verdict** in 493 evaluated entries — an
+`encoded_payload` catch on C4 that lifts that category's recall 0.7931 → 0.8276 and end-to-end
+paraphrase consistency 0.6490 → 0.6573. On C1, C2 and C3, `tier1+2` is identical to `tier1` to four
+decimals. That is the cost of a 738MB download and a p99 of ~39 ms, and it is the strongest argument
+in this repo for revisiting the ambiguous band the cascade gates on.
+
+Per-category recall on C4, `tier1+2+3` — precision is 1.0000 in every attack category, so these are
 misses, not false alarms:
 
 | Category | Recall | F1 | Support |
@@ -186,15 +196,25 @@ misses, not false alarms:
 | override_phrase | 0.3750 | 0.5455 | 24 |
 
 **Read these honestly.** Recall on `override_phrase` is 0.3750 — the cascade misses most reworded
-override attacks. Tier 2 only sees the 4.17% of inputs landing in the ambiguous band, so it shifts
-end-to-end paraphrase consistency by roughly one point (0.6490 → 0.6573). That is *not* the 0.978
-figure in [`docs/tier2-bakeoff.md`](docs/tier2-bakeoff.md): that gate scored the Tier 2 model in
-isolation over the whole corpus, and the two are not comparable. The ~1.7% false-positive rate is
-the number to weigh against those misses.
+override attacks — and 0.1000 on a German-language public corpus. The ~1.7% false-positive rate is
+the number to weigh against those misses. None of this is the 0.978 in
+[`docs/tier2-bakeoff.md`](docs/tier2-bakeoff.md): that gate scored the Tier 2 model in isolation over
+a whole corpus, and the two are not comparable.
 
-**Not yet measured** (protocol §2/§5): corpora C1–C3 (deepset, Lakera gandalf, AgentDojo) are not
-yet fetched or sha-pinned, and the 1-hour soak-test RSS slope has not been run. Those rows are
-absent from `BENCHMARK.md` rather than estimated.
+**Soak test (§5): inconclusive by the pre-registered metric, no leak by the evidence.** A 1-hour run
+at 9.14 req/s completed 32,919 scans. The locked estimator is an RSS slope with a ≤ 5 MB/hour gate,
+and it reads 22.85 MB/hour — but RSS spans 21 MB over the run, so a straight line through it cannot
+resolve a 5 MB/hour signal either way. Over the final third of the run RSS spans **0.15 MB across 51
+samples**: memory rises during warm-up, then stops. A leak keeps climbing; this does not. The slope
+stands as measured because changing a pre-registered estimator after seeing the data is a protocol
+decision, and the raw series is committed under `bench/results/soak/` so that call can be made on
+evidence.
+
+**Reproducibility (§7).** These C4 detection numbers are byte-identical to the previously published
+Apple M3 / Node v22 run — every per-category recall, F1, FPR and TNR matches to four decimals across
+a different OS, CPU and Node major. Only latency differs. Corpora C1–C3 are snapshotted at pinned
+upstream revisions and their sha256 is re-verified on every run, so a drifted corpus aborts the run
+rather than quietly changing a number.
 
 ## Architecture
 

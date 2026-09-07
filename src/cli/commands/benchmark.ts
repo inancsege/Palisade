@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import chalk from 'chalk';
 import { DetectionEngine } from '../../detection/engine.js';
@@ -24,7 +24,7 @@ import {
   assertTier2NotDegraded,
   type TierConfiguration,
 } from '../../bench/runner.js';
-import { runSoak, toCsv } from '../../bench/soak.js';
+import { fromCsv, runSoak, toCsv, type SoakResult } from '../../bench/soak.js';
 import {
   captureEnvironment,
   renderReport,
@@ -49,6 +49,10 @@ export const benchmarkCommand = new Command('benchmark')
     ALL_CONFIGURATIONS.join(','),
   )
   .option('--soak <minutes>', 'Also run the §5 soak test for N minutes (protocol: 60)', '0')
+  .option(
+    '--soak-csv <path>',
+    'Re-derive the soak row from a committed RSS series instead of measuring a new one',
+  )
   .option('--soak-rate <n>', 'Soak request rate per second (protocol: 10)', '10')
   .option('--soak-out <dir>', 'Directory for the soak RSS series', 'bench/results/soak')
   .option('--seed <n>', 'Override the pinned RNG seed (invalidates published numbers)', String(PINNED_SEED))
@@ -159,6 +163,15 @@ async function maybeSoak(
   requested: TierConfiguration[],
   modelPath: string | null,
 ): Promise<SoakSummary | null> {
+  // Re-deriving from a committed series reproduces a published row exactly and costs
+  // nothing; re-running costs an hour and produces a different one.
+  if (options.soakCsv) {
+    const path = options.soakCsv as string;
+    const result = fromCsv(readFileSync(resolve(process.cwd(), path), 'utf-8'));
+    console.log(chalk.dim(`\nsoak: re-derived from ${path}`));
+    return summarise(result, path);
+  }
+
   const minutes = Number(options.soak);
   if (!Number.isFinite(minutes) || minutes <= 0) return null;
 
@@ -192,6 +205,11 @@ async function maybeSoak(
   mkdirSync(dirname(csvPath), { recursive: true });
   writeFileSync(csvPath, toCsv(result), 'utf-8');
 
+  return summarise(result, `${options.soakOut as string}/${csvPath.split(/[\\/]/).pop()}`);
+}
+
+/** Shared by the measured and the re-derived path so both publish the same shape. */
+function summarise(result: SoakResult, csvPath: string): SoakSummary {
   const verdict = !result.resolvable
     ? chalk.yellow('inconclusive')
     : result.passed
@@ -199,7 +217,8 @@ async function maybeSoak(
       : chalk.red('FAIL');
   console.log(
     `soak: ${result.scans} scans, slope ${result.slopeMbPerHour.toFixed(2)} MB/hour, ` +
-      `RSS ${result.rssMinMb.toFixed(0)}-${result.rssMaxMb.toFixed(0)} MB — ${verdict}`,
+      `RSS ${result.rssMinMb.toFixed(0)}-${result.rssMaxMb.toFixed(0)} MB, ` +
+      `tail spread ${result.tailSpreadMb.toFixed(2)} MB — ${verdict}`,
   );
 
   return {
@@ -211,8 +230,9 @@ async function maybeSoak(
     slopeMbPerHour: result.slopeMbPerHour,
     rssMinMb: result.rssMinMb,
     rssMaxMb: result.rssMaxMb,
+    tailSpreadMb: result.tailSpreadMb,
     resolvable: result.resolvable,
     passed: result.passed,
-    csvPath: `${options.soakOut as string}/${csvPath.split(/[\\/]/).pop()}`,
+    csvPath,
   };
 }

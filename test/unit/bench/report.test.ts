@@ -143,6 +143,7 @@ describe('renderReport (protocol §3/§5 — nothing hidden)', () => {
         slopeMbPerHour: 1.23,
         rssMinMb: 150,
         rssMaxMb: 152,
+        tailSpreadMb: 0.4,
         resolvable: true,
         passed: true,
         csvPath: 'bench/results/soak/run.csv',
@@ -164,8 +165,9 @@ describe('renderReport (protocol §3/§5 — nothing hidden)', () => {
         scans: 32_724,
         ratePerSecond: 9.09,
         slopeMbPerHour: 79.05,
-        rssMinMb: 38,
-        rssMaxMb: 229,
+        rssMinMb: 1193,
+        rssMaxMb: 1215,
+        tailSpreadMb: 0.15,
         resolvable: false,
         passed: false,
       csvPath: 'bench/results/soak/run.csv',
@@ -174,8 +176,11 @@ describe('renderReport (protocol §3/§5 — nothing hidden)', () => {
     // A 79 MB/hour slope over a series that swings 191 MB is noise, not a leak. The
     // report must say so rather than publish a FAIL the evidence does not support.
     expect(out).toContain('inconclusive');
-    expect(out).toMatch(/Inconclusive, and reported as such/);
+    expect(out).toMatch(/Inconclusive against the pre-registered estimator/);
     expect(out).not.toMatch(/\| FAIL \|/);
+    // A flat tail is the evidence that answers the leak question the slope could not.
+    expect(out).toMatch(/Supplementary evidence — tail flatness/);
+    expect(out).toMatch(/no sustained-load memory leak/);
   });
 });
 

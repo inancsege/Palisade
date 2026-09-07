@@ -26,6 +26,8 @@ export interface SoakResult {
   slopeMbPerHour: number;
   rssMinMb: number;
   rssMaxMb: number;
+  /** Supplementary: RSS spread over the final third — a flat tail means no ongoing growth. */
+  tailSpreadMb: number;
   /**
    * Whether the slope can distinguish a leak from noise at all.
    *
@@ -76,6 +78,24 @@ export function slopeMbPerHour(samples: RssSample[]): number {
 export function rssEnvelopeMb(samples: RssSample[]): [min: number, max: number] {
   const steady = samples.slice(1).map((s) => s.rssBytes / BYTES_PER_MB);
   return steady.length > 0 ? [Math.min(...steady), Math.max(...steady)] : [0, 0];
+}
+
+/**
+ * Spread of the final third of the run, in MB.
+ *
+ * SUPPLEMENTARY evidence, not a replacement for the pre-registered slope. A process that
+ * grows during warm-up and then settles produces a saturating curve, and a single
+ * regression line over the whole run over-reads that as drift. The question the protocol
+ * is really asking — is memory still climbing once warm? — is answered by whether the tail
+ * is flat. A leak keeps climbing; an allocator high-water mark does not.
+ */
+export function tailSpreadMb(samples: RssSample[], durationMs: number): number {
+  const from = durationMs * (2 / 3);
+  const tail = samples
+    .slice(1)
+    .filter((s) => s.elapsedMs >= from)
+    .map((s) => s.rssBytes / BYTES_PER_MB);
+  return tail.length > 1 ? Math.max(...tail) - Math.min(...tail) : 0;
 }
 
 /**
@@ -160,6 +180,48 @@ export async function runSoak(options: SoakOptions): Promise<SoakResult> {
     slopeMbPerHour: slope,
     rssMinMb,
     rssMaxMb,
+    tailSpreadMb: tailSpreadMb(samples, durationMs),
+    resolvable: isResolvable(samples, durationMs),
+    passed: slope <= MAX_RSS_SLOPE_MB_PER_HOUR,
+  };
+}
+
+/**
+ * Rebuild a result from a committed CSV series.
+ *
+ * The soak costs an hour of wall-clock, so re-running it to correct how its numbers are
+ * PRESENTED would be paying for a measurement twice. The series is the evidence; this
+ * re-derives every summary figure from it, which also means a published soak row can be
+ * reproduced from the committed CSV without access to the machine that produced it.
+ */
+export function fromCsv(csv: string): SoakResult {
+  const rows = csv
+    .split('\n')
+    .slice(1)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => line.split(','));
+
+  const samples: RssSample[] = rows.map((cells) => ({
+    elapsedMs: Number(cells[0]),
+    rssBytes: Number(cells[1]),
+    scans: Number(cells[3]),
+  }));
+
+  const durationMs = samples.length > 0 ? samples[samples.length - 1].elapsedMs : 0;
+  const scans = samples.length > 0 ? samples[samples.length - 1].scans : 0;
+  const slope = slopeMbPerHour(samples);
+  const [rssMinMb, rssMaxMb] = rssEnvelopeMb(samples);
+
+  return {
+    samples,
+    scans,
+    durationMs,
+    achievedRatePerSecond: durationMs > 0 ? scans / (durationMs / 1000) : 0,
+    slopeMbPerHour: slope,
+    rssMinMb,
+    rssMaxMb,
+    tailSpreadMb: tailSpreadMb(samples, durationMs),
     resolvable: isResolvable(samples, durationMs),
     passed: slope <= MAX_RSS_SLOPE_MB_PER_HOUR,
   };

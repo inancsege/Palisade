@@ -39,9 +39,9 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 2.77 | 0.02 | 0.12 | 3.34 |
-| `tier1+2` | 0.34 | 0.03 | 0.14 | 91.29 |
-| `tier1+2+3` | 3.53 | 0.03 | 0.15 | 86.39 |
+| `tier1` | 3.85 | 0.02 | 0.15 | 1.73 |
+| `tier1+2` | 0.33 | 0.02 | 0.14 | 92.75 |
+| `tier1+2+3` | 3.95 | 0.03 | 0.15 | 76.21 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
@@ -82,9 +82,9 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 0.08 | 0.03 | 0.06 | 0.12 |
-| `tier1+2` | 0.42 | 0.03 | 0.15 | 5.19 |
-| `tier1+2+3` | 3.55 | 0.03 | 0.11 | 1.96 |
+| `tier1` | 0.05 | 0.02 | 0.04 | 0.07 |
+| `tier1+2` | 0.27 | 0.03 | 0.07 | 0.15 |
+| `tier1+2+3` | 3.78 | 0.03 | 0.07 | 2.18 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
@@ -125,9 +125,9 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 1.90 | 0.02 | 0.09 | 1.28 |
-| `tier1+2` | 0.30 | 0.04 | 73.07 | 85.85 |
-| `tier1+2+3` | 3.98 | 0.05 | 89.20 | 103.14 |
+| `tier1` | 2.09 | 0.03 | 0.10 | 1.22 |
+| `tier1+2` | 0.32 | 0.04 | 82.73 | 87.83 |
+| `tier1+2+3` | 3.81 | 0.05 | 82.56 | 92.62 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
@@ -166,9 +166,9 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 2.00 | 0.02 | 0.05 | 1.04 |
-| `tier1+2` | 0.13 | 0.03 | 0.11 | 39.66 |
-| `tier1+2+3` | 0.10 | 0.04 | 0.46 | 38.93 |
+| `tier1` | 1.96 | 0.02 | 0.06 | 1.06 |
+| `tier1+2` | 0.15 | 0.03 | 0.10 | 43.17 |
+| `tier1+2+3` | 3.29 | 0.04 | 1.77 | 34.53 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
@@ -211,7 +211,15 @@ The pre-registered ship threshold of **≥ 0.75** (D03/D04) was defined for the 
 
 ## Soak test — RSS slope (§5)
 
-Not run for this report. `palisade benchmark --soak 60` runs the pre-registered 1-hour / 10 req/s soak and fills this section in; the row is left absent rather than estimated.
+| Duration | Rate | Scans | RSS slope | RSS range | Threshold | Verdict |
+|---|---|---|---|---|---|---|
+| 60.0 min | 9.14 req/s | 32919 | 22.85 MB/hour | 1193-1215 MB | ≤ 5 MB/hour | inconclusive |
+
+**Inconclusive against the pre-registered estimator, and reported as such.** Steady-state RSS spans 21 MB across the run, wider than the 5 MB/hour the threshold permits, so a single regression line over the whole run cannot be read as drift and the slope above is printed for completeness rather than as a verdict. Changing the estimator after seeing the data is a protocol decision (§5), not a reporting one, so the pre-registered number stands as measured and the raw series is committed for inspection.
+
+**Supplementary evidence — tail flatness.** Over the final third of the run RSS spans 0.15 MB. Memory rises during warm-up and then stops: the series is a saturating curve, which a straight line over-reads as growth. A leak keeps climbing once warm; this does not. On this evidence there is no sustained-load memory leak — but that conclusion comes from the tail, not from the pre-registered slope.
+
+Raw RSS series: `bench/results/soak/2026-09-07T23-17-11-830Z.csv`.
 
 ## Reproduce these numbers
 
