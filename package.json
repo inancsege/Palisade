@@ -22,6 +22,8 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "typecheck:tests": "tsc -p tsconfig.test.json",
+    "benchmark": "npm run build && node dist/cli/index.js benchmark",
+    "corpora:fetch": "node bench/fetch-corpora.mjs",
     "prepare": "test -f src/index.ts && tsup || true"
   },
   "peerDependencies": {

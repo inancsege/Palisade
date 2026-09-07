@@ -1,0 +1,19 @@
+# Snapshot written by bench/fetch-corpora.mjs — do not hand-edit.
+corpus_id: C2
+name: "Lakera/gandalf_ignore_instructions (test split)"
+license: "MIT"
+language: English
+role: "Canonical ignore-instructions corpus"
+source: "https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions"
+pinned_revision: 04737b65e90a6794ec227012e4a255a7def6344b
+snapshot_date: 2026-09-07
+train_overlap: partial
+contamination_note: >
+  The canonical public ignore-instructions corpus. Almost certainly inside the Tier 2
+  model training mix — an IN-DISTRIBUTION (contaminated) result, reported side-by-side
+  for transparency only (§3).
+attack_count: 112
+attacks_sha256: ce938fad1f3e55b3a1203c015c5a6a2526c339d7032c2fa17f308e922162cf53
+benign_count: 0
+benign_sha256: null # shared FP control set — see benign_source
+benign_source: "bench/corpus/benign.jsonl (shared FP control set, protocol §2)"

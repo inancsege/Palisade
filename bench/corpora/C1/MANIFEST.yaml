@@ -1,0 +1,19 @@
+# Snapshot written by bench/fetch-corpora.mjs — do not hand-edit.
+corpus_id: C1
+name: "deepset/prompt-injections (test split)"
+license: "CC-BY-4.0"
+language: German + English
+role: "Cross-lingual signal"
+source: "https://huggingface.co/datasets/deepset/prompt-injections"
+pinned_revision: 4f61ecb038e9c3fb77e21034b22511b523772cdd
+snapshot_date: 2026-09-07
+train_overlap: partial
+contamination_note: >
+  Public dataset predating the Tier 2 model. The classifier was very likely trained on
+  overlapping data, so these rows are an IN-DISTRIBUTION (contaminated) result and must
+  never source a headline number (§3).
+attack_count: 60
+attacks_sha256: ed830e49316957d5a0b717137f02da45e6390b3f52d5a42add48cba49dc4122d
+benign_count: 56
+benign_sha256: 898974a85953e3329730a36821e4a0b129d45cb8f18c8d078c4ff8ca33588965
+benign_source: "own (label 0 rows of the same split)"

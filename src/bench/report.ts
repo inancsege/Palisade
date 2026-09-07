@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import type { CategoryRow, LatencyColumns } from './metrics.js';
 import type { TrainOverlap } from './corpus.js';
 import type { TierConfiguration } from './runner.js';
+import { MAX_RSS_SLOPE_MB_PER_HOUR } from './soak.js';
 
 const require = createRequire(import.meta.url);
 
@@ -80,12 +81,35 @@ export interface ConfigurationResult {
   tierDisagreementRate: number;
 }
 
-export interface ReportInput {
-  corpus: { id: string; name: string; trainOverlap: TrainOverlap; sha256: string; entries: number };
+export interface CorpusResult {
+  corpus: {
+    id: string;
+    name: string;
+    trainOverlap: TrainOverlap;
+    sha256: string;
+    entries: number;
+    /** Paraphrase consistency is undefined without groups; rendered `n/a` rather than 0. */
+    hasParaphraseGroups: boolean;
+  };
   evaluated: number;
-  seed: number;
   results: ConfigurationResult[];
+}
+
+/** Rendered from a completed §5 soak run. Absent when no soak was requested. */
+export interface SoakSummary {
+  durationMs: number;
+  scans: number;
+  ratePerSecond: number;
+  slopeMbPerHour: number;
+  passed: boolean;
+  csvPath: string;
+}
+
+export interface ReportInput {
+  corpora: CorpusResult[];
+  seed: number;
   environment: BenchmarkEnvironment;
+  soak?: SoakSummary | null;
 }
 
 /** Ship threshold for paraphrase consistency (D03/D04). */
@@ -111,13 +135,17 @@ export function renderReport(input: ReportInput): string {
 
   lines.push('## Run provenance (§7)');
   lines.push('');
+  lines.push('| Corpus | Name | **train_overlap** | Entries | Evaluated (eval split) | sha256 |');
+  lines.push('|---|---|---|---|---|---|');
+  for (const c of input.corpora) {
+    lines.push(
+      `| \`${c.corpus.id}\` | ${c.corpus.name} | **${c.corpus.trainOverlap}** | ${c.corpus.entries} | ` +
+        `${c.evaluated} | \`${c.corpus.sha256}\` |`,
+    );
+  }
+  lines.push('');
   lines.push('| Field | Value |');
   lines.push('|---|---|');
-  lines.push(`| Corpus | \`${input.corpus.id}\` — ${input.corpus.name} |`);
-  lines.push(`| **train_overlap (contamination)** | **${input.corpus.trainOverlap}** |`);
-  lines.push(`| Corpus sha256 | \`${input.corpus.sha256}\` |`);
-  lines.push(`| Corpus entries | ${input.corpus.entries} |`);
-  lines.push(`| Evaluated (eval split only) | ${input.evaluated} |`);
   lines.push(`| Pinned RNG seed | \`${input.seed}\` |`);
   lines.push(`| Palisade | ${input.environment.palisade} |`);
   lines.push(`| Node | ${input.environment.node} |`);
@@ -125,66 +153,120 @@ export function renderReport(input: ReportInput): string {
   lines.push(`| CPU | ${input.environment.cpuModel} (${input.environment.cpus} cores) |`);
   lines.push(`| onnxruntime-node (effective) | ${input.environment.onnxruntimeNode ?? 'not installed'} |`);
   lines.push('');
+
+  const headline = input.corpora.filter((c) => c.corpus.trainOverlap === 'none');
+  const contaminated = input.corpora.filter((c) => c.corpus.trainOverlap !== 'none');
   lines.push(
-    `Only \`train_overlap: none\` corpora may source a headline number (§3). This corpus is \`${input.corpus.trainOverlap}\`.`,
+    `Only \`train_overlap: none\` corpora may source a headline number (§3): ` +
+      `${headline.map((c) => `\`${c.corpus.id}\``).join(', ') || 'none in this run'}. ` +
+      (contaminated.length > 0
+        ? `${contaminated.map((c) => `\`${c.corpus.id}\``).join(', ')} ` +
+          `${contaminated.length === 1 ? 'is' : 'are'} **contaminated** — the Tier 2 model was ` +
+          'very likely trained on overlapping public data, so those rows are an ' +
+          '**in-distribution** result, reported side-by-side for transparency only and never ' +
+          'as a headline.'
+        : ''),
   );
   lines.push('');
 
-  lines.push('## Headline metrics by tier configuration (§5)');
-  lines.push('');
-  lines.push(
-    '| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |',
-  );
-  lines.push('|---|---|---|---|---|---|');
-  for (const r of input.results) {
-    lines.push(
-      `| \`${r.configuration}\` | ${pct(r.falsePositiveRate)} | ${pct(r.trueNegativeRate)} | ` +
-        `${num(r.paraphraseConsistency)} | ${pct(r.tier2FiringRate)} | ${pct(r.tierDisagreementRate)} |`,
-    );
-  }
-  lines.push('');
-  lines.push(
-    `**Reading the paraphrase-consistency column.** The pre-registered ship threshold of ` +
-      `**≥ ${PARAPHRASE_SHIP_THRESHOLD}** (D03/D04) was defined for the Tier 2 MODEL scored in ` +
-      'isolation over the whole corpus — that gate was measured at **0.978** and is recorded in ' +
-      '`docs/tier2-bakeoff.md`. The column above measures something different: the END-TO-END ' +
-      'CASCADE, in which Tier 2 only sees inputs that land in the ambiguous band ' +
-      `(${pct(input.results.find((r) => r.tier2FiringRate > 0)?.tier2FiringRate ?? 0)} of this eval split). ` +
-      'The two numbers are not comparable, and the cascade figure is NOT a failure of the D03/D04 ' +
-      'gate. It is reported here because §5 locks paraphrase consistency as a required metric.',
-  );
-  lines.push('');
-
-  lines.push('## Latency — 4 columns, never collapsed (§5)');
-  lines.push('');
-  lines.push('| Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |');
-  lines.push('|---|---|---|---|---|');
-  for (const r of input.results) {
-    lines.push(
-      `| \`${r.configuration}\` | ${ms(r.latency.cold_first_call_ms)} | ${ms(r.latency.warm_p50_ms)} | ` +
-        `${ms(r.latency.warm_p95_ms)} | ${ms(r.latency.warm_p99_ms)} |`,
-    );
-  }
-  lines.push('');
-
-  lines.push('## Per-category F1 (§5 — one row per category, plus benign)');
-  lines.push('');
-  for (const r of input.results) {
-    lines.push(`### \`${r.configuration}\``);
+  for (const c of input.corpora) {
+    lines.push(`## \`${c.corpus.id}\` — ${c.corpus.name} (train_overlap: ${c.corpus.trainOverlap})`);
     lines.push('');
-    lines.push('| Category | Precision | Recall | F1 | Support (attacks) |');
-    lines.push('|---|---|---|---|---|');
-    for (const c of r.categories) {
-      lines.push(`| ${c.category} | ${num(c.precision)} | ${num(c.recall)} | ${num(c.f1)} | ${c.support} |`);
+
+    lines.push('### Headline metrics by tier configuration (§5)');
+    lines.push('');
+    lines.push(
+      '| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |',
+    );
+    lines.push('|---|---|---|---|---|---|');
+    for (const r of c.results) {
+      const consistency = c.corpus.hasParaphraseGroups ? num(r.paraphraseConsistency) : 'n/a';
+      lines.push(
+        `| \`${r.configuration}\` | ${pct(r.falsePositiveRate)} | ${pct(r.trueNegativeRate)} | ` +
+          `${consistency} | ${pct(r.tier2FiringRate)} | ${pct(r.tierDisagreementRate)} |`,
+      );
     }
     lines.push('');
+    if (!c.corpus.hasParaphraseGroups) {
+      lines.push(
+        '`n/a`: this corpus ships no paraphrase groups, so paraphrase consistency is undefined ' +
+          'over it. It is not zero — it is unmeasurable, and reporting 0.0000 here would be a lie.',
+      );
+      lines.push('');
+    }
+
+    lines.push('### Latency — 4 columns, never collapsed (§5)');
+    lines.push('');
+    lines.push('| Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |');
+    lines.push('|---|---|---|---|---|');
+    for (const r of c.results) {
+      lines.push(
+        `| \`${r.configuration}\` | ${ms(r.latency.cold_first_call_ms)} | ${ms(r.latency.warm_p50_ms)} | ` +
+          `${ms(r.latency.warm_p95_ms)} | ${ms(r.latency.warm_p99_ms)} |`,
+      );
+    }
+    lines.push('');
+
+    lines.push('### Per-category F1 (§5 — one row per category, plus benign)');
+    lines.push('');
+    for (const r of c.results) {
+      lines.push(`#### \`${r.configuration}\``);
+      lines.push('');
+      lines.push('| Category | Precision | Recall | F1 | Support (attacks) |');
+      lines.push('|---|---|---|---|---|');
+      for (const row of r.categories) {
+        lines.push(
+          `| ${row.category} | ${num(row.precision)} | ${num(row.recall)} | ${num(row.f1)} | ${row.support} |`,
+        );
+      }
+      lines.push('');
+    }
   }
+
+  const c4 = input.corpora.find((c) => c.corpus.id === 'C4');
+  if (c4) {
+    lines.push('## Reading the paraphrase-consistency column');
+    lines.push('');
+    lines.push(
+      `The pre-registered ship threshold of **≥ ${PARAPHRASE_SHIP_THRESHOLD}** (D03/D04) was ` +
+        'defined for the Tier 2 MODEL scored in isolation over the whole corpus — that gate was ' +
+        'measured at **0.978** and is recorded in `docs/tier2-bakeoff.md`. The C4 column above ' +
+        'measures something different: the END-TO-END CASCADE, in which Tier 2 only sees inputs ' +
+        `that land in the ambiguous band (${pct(c4.results.find((r) => r.tier2FiringRate > 0)?.tier2FiringRate ?? 0)} ` +
+        'of the C4 eval split). The two numbers are not comparable, and the cascade figure is NOT ' +
+        'a failure of the D03/D04 gate. It is reported because §5 locks paraphrase consistency as ' +
+        'a required metric.',
+    );
+    lines.push('');
+  }
+
+  lines.push('## Soak test — RSS slope (§5)');
+  lines.push('');
+  if (input.soak) {
+    const minutes = (input.soak.durationMs / 60_000).toFixed(1);
+    lines.push('| Duration | Rate | Scans | RSS slope | Threshold | Verdict |');
+    lines.push('|---|---|---|---|---|---|');
+    lines.push(
+      `| ${minutes} min | ${input.soak.ratePerSecond} req/s | ${input.soak.scans} | ` +
+        `${input.soak.slopeMbPerHour.toFixed(2)} MB/hour | ≤ ${MAX_RSS_SLOPE_MB_PER_HOUR} MB/hour | ` +
+        `${input.soak.passed ? '✅ pass' : '❌ fail'} |`,
+    );
+    lines.push('');
+    lines.push(`Raw RSS series: \`${input.soak.csvPath}\`.`);
+  } else {
+    lines.push(
+      'Not run for this report. `palisade benchmark --soak 60` runs the pre-registered ' +
+        '1-hour / 10 req/s soak and fills this section in; the row is left absent rather than estimated.',
+    );
+  }
+  lines.push('');
 
   lines.push('## Reproduce these numbers');
   lines.push('');
   lines.push('```bash');
   lines.push('git clone https://github.com/inancsege/Palisade.git && cd Palisade');
   lines.push('npm install && npm run build');
+  lines.push('node bench/fetch-corpora.mjs    # re-snapshots C1-C3 at their pinned revisions');
   lines.push('palisade tier2 install          # ~700MB, only needed for the tier1+2 rows');
   lines.push('palisade benchmark --emit-env   # writes BENCHMARK.md + environment.json');
   lines.push('```');

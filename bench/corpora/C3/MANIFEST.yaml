@@ -1,0 +1,19 @@
+# Snapshot written by bench/fetch-corpora.mjs — do not hand-edit.
+corpus_id: C3
+name: "AgentDojo important_instructions attack strings"
+license: "Apache-2.0"
+language: English
+role: "Agentic-pattern coverage"
+source: "https://github.com/ethz-spylab/agentdojo"
+pinned_revision: 089ed468cf3ed0322acc66b0211f26d9d90dbf60
+snapshot_date: 2026-09-07
+train_overlap: none
+contamination_note: >
+  Agentic tool-use injections rendered from the AgentDojo important_instructions template.
+  Marked none per the protocol table, but this is UNVERIFIED against the Tier 2 model
+  training set — treat it as weaker evidence than C4, which is repo-authored.
+attack_count: 27
+attacks_sha256: 682a0761e46812a1d171e68628b5caa4c44599683e8e1483ba77e94fcfc38de6
+benign_count: 0
+benign_sha256: null # shared FP control set — see benign_source
+benign_source: "bench/corpus/benign.jsonl (shared FP control set, protocol §2)"

@@ -5,23 +5,156 @@
 
 ## Run provenance (§7)
 
+| Corpus | Name | **train_overlap** | Entries | Evaluated (eval split) | sha256 |
+|---|---|---|---|---|---|
+| `C1` | deepset/prompt-injections (test split) | **partial** | 116 | 93 | `8d196b851121e0498012b5856d03c739c2781ddaacbecbb8721794267486cb1e` |
+| `C2` | Lakera/gandalf_ignore_instructions (test split) | **partial** | 187 | 150 | `6f9f03b7dee5967b28cf4cbed6f15ab7f168d042d46fe93cd7f725bdc5e94a5d` |
+| `C3` | AgentDojo important_instructions attack strings | **none** | 102 | 82 | `b3a14908af1e5b0ad94d060a07353756fc780ce11c4de8a579dfc4ba8545097e` |
+| `C4` | Palisade held-out adversarial set | **none** | 210 | 168 | `245c6b9029ff9b63f87984632ccccd72edacb0d9933f55e6bc0605212f054e96` |
+
 | Field | Value |
 |---|---|
-| Corpus | `C4` — Palisade held-out adversarial set |
-| **train_overlap (contamination)** | **none** |
-| Corpus sha256 | `245c6b9029ff9b63f87984632ccccd72edacb0d9933f55e6bc0605212f054e96` |
-| Corpus entries | 210 |
-| Evaluated (eval split only) | 168 |
 | Pinned RNG seed | `20260603` |
 | Palisade | 0.1.0 |
-| Node | v22.20.0 |
-| Platform | darwin/arm64 |
-| CPU | Apple M3 (8 cores) |
+| Node | v24.14.0 |
+| Platform | win32/x64 |
+| CPU | 12th Gen Intel(R) Core(TM) i7-12700H (20 cores) |
 | onnxruntime-node (effective) | 1.21.0 |
 
-Only `train_overlap: none` corpora may source a headline number (§3). This corpus is `none`.
+Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4`. `C1`, `C2` are **contaminated** — the Tier 2 model was very likely trained on overlapping public data, so those rows are an **in-distribution** result, reported side-by-side for transparency only and never as a headline.
 
-## Headline metrics by tier configuration (§5)
+## `C1` — deepset/prompt-injections (test split) (train_overlap: partial)
+
+### Headline metrics by tier configuration (§5)
+
+| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+|---|---|---|---|---|---|
+| `tier1` | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
+| `tier1+2` | 0.00% | 100.00% | n/a | 2.15% | 0.00% |
+| `tier1+2+3` | 0.00% | 100.00% | n/a | 2.15% | 0.00% |
+
+`n/a`: this corpus ships no paraphrase groups, so paraphrase consistency is undefined over it. It is not zero — it is unmeasurable, and reporting 0.0000 here would be a lie.
+
+### Latency — 4 columns, never collapsed (§5)
+
+| Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
+|---|---|---|---|---|
+| `tier1` | 2.77 | 0.02 | 0.12 | 3.34 |
+| `tier1+2` | 0.34 | 0.03 | 0.14 | 91.29 |
+| `tier1+2+3` | 3.53 | 0.03 | 0.15 | 86.39 |
+
+### Per-category F1 (§5 — one row per category, plus benign)
+
+#### `tier1`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| injection | 1.0000 | 0.1000 | 0.1818 | 50 |
+
+#### `tier1+2`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| injection | 1.0000 | 0.1000 | 0.1818 | 50 |
+
+#### `tier1+2+3`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| injection | 1.0000 | 0.1000 | 0.1818 | 50 |
+
+## `C2` — Lakera/gandalf_ignore_instructions (test split) (train_overlap: partial)
+
+### Headline metrics by tier configuration (§5)
+
+| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+|---|---|---|---|---|---|
+| `tier1` | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
+| `tier1+2` | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
+| `tier1+2+3` | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
+
+`n/a`: this corpus ships no paraphrase groups, so paraphrase consistency is undefined over it. It is not zero — it is unmeasurable, and reporting 0.0000 here would be a lie.
+
+### Latency — 4 columns, never collapsed (§5)
+
+| Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
+|---|---|---|---|---|
+| `tier1` | 0.08 | 0.03 | 0.06 | 0.12 |
+| `tier1+2` | 0.42 | 0.03 | 0.15 | 5.19 |
+| `tier1+2+3` | 3.55 | 0.03 | 0.11 | 1.96 |
+
+### Per-category F1 (§5 — one row per category, plus benign)
+
+#### `tier1`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| override_phrase | 1.0000 | 0.2935 | 0.4538 | 92 |
+
+#### `tier1+2`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| override_phrase | 1.0000 | 0.2935 | 0.4538 | 92 |
+
+#### `tier1+2+3`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| override_phrase | 1.0000 | 0.2935 | 0.4538 | 92 |
+
+## `C3` — AgentDojo important_instructions attack strings (train_overlap: none)
+
+### Headline metrics by tier configuration (§5)
+
+| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+|---|---|---|---|---|---|
+| `tier1` | 1.64% | 98.36% | n/a | 0.00% | 0.00% |
+| `tier1+2` | 1.64% | 98.36% | n/a | 8.54% | 0.00% |
+| `tier1+2+3` | 1.64% | 98.36% | n/a | 8.54% | 0.00% |
+
+`n/a`: this corpus ships no paraphrase groups, so paraphrase consistency is undefined over it. It is not zero — it is unmeasurable, and reporting 0.0000 here would be a lie.
+
+### Latency — 4 columns, never collapsed (§5)
+
+| Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
+|---|---|---|---|---|
+| `tier1` | 1.90 | 0.02 | 0.09 | 1.28 |
+| `tier1+2` | 0.30 | 0.04 | 73.07 | 85.85 |
+| `tier1+2+3` | 3.98 | 0.05 | 89.20 | 103.14 |
+
+### Per-category F1 (§5 — one row per category, plus benign)
+
+#### `tier1`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| role_marker | 1.0000 | 0.3333 | 0.5000 | 21 |
+
+#### `tier1+2`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| role_marker | 1.0000 | 0.3333 | 0.5000 | 21 |
+
+#### `tier1+2+3`
+
+| Category | Precision | Recall | F1 | Support (attacks) |
+|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
+| role_marker | 1.0000 | 0.3333 | 0.5000 | 21 |
+
+## `C4` — Palisade held-out adversarial set (train_overlap: none)
+
+### Headline metrics by tier configuration (§5)
 
 | Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
 |---|---|---|---|---|---|
@@ -29,19 +162,17 @@ Only `train_overlap: none` corpora may source a headline number (§3). This corp
 | `tier1+2` | 1.69% | 98.31% | 0.6573 | 4.17% | 0.00% |
 | `tier1+2+3` | 1.69% | 98.31% | 0.6573 | 4.17% | 0.00% |
 
-**Reading the paraphrase-consistency column.** The pre-registered ship threshold of **≥ 0.75** (D03/D04) was defined for the Tier 2 MODEL scored in isolation over the whole corpus — that gate was measured at **0.978** and is recorded in `docs/tier2-bakeoff.md`. The column above measures something different: the END-TO-END CASCADE, in which Tier 2 only sees inputs that land in the ambiguous band (4.17% of this eval split). The two numbers are not comparable, and the cascade figure is NOT a failure of the D03/D04 gate. It is reported here because §5 locks paraphrase consistency as a required metric.
-
-## Latency — 4 columns, never collapsed (§5)
+### Latency — 4 columns, never collapsed (§5)
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 2.69 | 0.02 | 0.06 | 2.00 |
-| `tier1+2` | 0.17 | 0.01 | 0.23 | 121.98 |
-| `tier1+2+3` | 2.27 | 0.01 | 1.82 | 24.34 |
+| `tier1` | 2.00 | 0.02 | 0.05 | 1.04 |
+| `tier1+2` | 0.13 | 0.03 | 0.11 | 39.66 |
+| `tier1+2+3` | 0.10 | 0.04 | 0.46 | 38.93 |
 
-## Per-category F1 (§5 — one row per category, plus benign)
+### Per-category F1 (§5 — one row per category, plus benign)
 
-### `tier1`
+#### `tier1`
 
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
@@ -52,7 +183,7 @@ Only `train_overlap: none` corpora may source a headline number (§3). This corp
 | override_phrase | 1.0000 | 0.3750 | 0.5455 | 24 |
 | role_marker | 1.0000 | 0.9375 | 0.9677 | 16 |
 
-### `tier1+2`
+#### `tier1+2`
 
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
@@ -63,7 +194,7 @@ Only `train_overlap: none` corpora may source a headline number (§3). This corp
 | override_phrase | 1.0000 | 0.3750 | 0.5455 | 24 |
 | role_marker | 1.0000 | 0.9375 | 0.9677 | 16 |
 
-### `tier1+2+3`
+#### `tier1+2+3`
 
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
@@ -73,12 +204,21 @@ Only `train_overlap: none` corpora may source a headline number (§3). This corp
 | exfiltration | 1.0000 | 0.5417 | 0.7027 | 24 |
 | override_phrase | 1.0000 | 0.3750 | 0.5455 | 24 |
 | role_marker | 1.0000 | 0.9375 | 0.9677 | 16 |
+
+## Reading the paraphrase-consistency column
+
+The pre-registered ship threshold of **≥ 0.75** (D03/D04) was defined for the Tier 2 MODEL scored in isolation over the whole corpus — that gate was measured at **0.978** and is recorded in `docs/tier2-bakeoff.md`. The C4 column above measures something different: the END-TO-END CASCADE, in which Tier 2 only sees inputs that land in the ambiguous band (4.17% of the C4 eval split). The two numbers are not comparable, and the cascade figure is NOT a failure of the D03/D04 gate. It is reported because §5 locks paraphrase consistency as a required metric.
+
+## Soak test — RSS slope (§5)
+
+Not run for this report. `palisade benchmark --soak 60` runs the pre-registered 1-hour / 10 req/s soak and fills this section in; the row is left absent rather than estimated.
 
 ## Reproduce these numbers
 
 ```bash
 git clone https://github.com/inancsege/Palisade.git && cd Palisade
 npm install && npm run build
+node bench/fetch-corpora.mjs    # re-snapshots C1-C3 at their pinned revisions
 palisade tier2 install          # ~700MB, only needed for the tier1+2 rows
 palisade benchmark --emit-env   # writes BENCHMARK.md + environment.json
 ```

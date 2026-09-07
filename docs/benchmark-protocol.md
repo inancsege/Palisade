@@ -36,10 +36,29 @@ timeline (PITFALLS P10.4). Each corpus carries a `train_overlap` field in its MA
 
 | # | Corpus | License | Lang | Role | sha256 | train_overlap |
 |---|--------|---------|------|------|--------|---------------|
-| C1 | `deepset/prompt-injections` (116-row test split) | Apache-2.0 | German | Cross-lingual signal | `<pending — pinned when corpus snapshot lands (Phase 3)>` | **partial** |
-| C2 | `Lakera/gandalf_ignore_instructions` (112-row test split) | MIT | English | Canonical ignore-instructions corpus | `<pending — Phase 3>` | **partial** |
-| C3 | AgentDojo `important_instructions` attack strings | Apache-2.0 | English | Agentic-pattern coverage | `<pending — Phase 3>` | **none** (verify per model) |
+| C1 | `deepset/prompt-injections` (116-row test split) | CC-BY-4.0 | German + English | Cross-lingual signal | `ed830e49…4122d` attacks / `898974a8…88965` benign | **partial** |
+| C2 | `Lakera/gandalf_ignore_instructions` (112-row test split) | MIT | English | Canonical ignore-instructions corpus | `ce938fad…62cf53` attacks | **partial** |
+| C3 | AgentDojo `important_instructions` attack strings (27 unique) | Apache-2.0 | English | Agentic-pattern coverage | `682a0761…38de6` attacks | **none** (unverified per model) |
 | C4 | **Held-out adversarial set** (~200 entries, curated post-Apr-2024) | This repo (MIT) | English | **Headline number source** | owned by `bench/corpus/MANIFEST.yaml` | **none** |
+
+### Snapshot pins (filled at Phase 3, 2026-09-07)
+
+C1-C3 are third-party corpora, snapshotted by `bench/fetch-corpora.mjs` at a pinned upstream
+revision and re-verified on every benchmark run (`src/bench/corpora.ts`, `verifyPin`) — a drifted
+snapshot aborts the run instead of publishing a number under a stale provenance row.
+
+| # | Upstream | Pinned revision |
+|---|----------|-----------------|
+| C1 | huggingface.co/datasets/deepset/prompt-injections | `4f61ecb038e9c3fb77e21034b22511b523772cdd` |
+| C2 | huggingface.co/datasets/Lakera/gandalf_ignore_instructions | `04737b65e90a6794ec227012e4a255a7def6344b` |
+| C3 | github.com/ethz-spylab/agentdojo | `089ed468cf3ed0322acc66b0211f26d9d90dbf60` |
+
+C1 carries its own benign half (the `label: 0` rows of the same split). C2 and C3 are attack-only
+upstream, so they borrow the shared FP control set below for their benign half — FPR/TNR on those
+two corpora therefore measure the same control set, by design.
+
+C3's `train_overlap: none` is the protocol's registered classification and remains **unverified**
+against the Tier 2 model's training set; it is weaker evidence than C4, which is repo-authored.
 
 C4 is the only `train_overlap: none` corpus authored by this project; it is the headline source
 and is **dual-purpose** — it is also the 200+ fixed inputs consumed by the FOUND-06 tokenizer-parity

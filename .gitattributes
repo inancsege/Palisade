@@ -1,0 +1,5 @@
+# Corpus snapshots are sha256-pinned (docs/benchmark-protocol.md §7) and the pin is
+# verified on every benchmark run. Line-ending conversion would change the bytes on
+# checkout and fail the pin, so these files are never normalized.
+bench/corpora/**/*.jsonl -text
+bench/corpus/*.jsonl -text

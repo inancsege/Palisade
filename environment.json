@@ -1,11 +1,11 @@
 {
   "palisade": "0.1.0",
-  "node": "v22.20.0",
-  "platform": "darwin",
-  "arch": "arm64",
-  "cpuModel": "Apple M3",
-  "cpus": 8,
-  "totalMemoryBytes": 17179869184,
+  "node": "v24.14.0",
+  "platform": "win32",
+  "arch": "x64",
+  "cpuModel": "12th Gen Intel(R) Core(TM) i7-12700H",
+  "cpus": 20,
+  "totalMemoryBytes": 16962281472,
   "onnxruntimeNode": "1.21.0",
   "transformersJs": "3.8.1"
 }
