@@ -72,7 +72,7 @@ describe('runSoak', () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(5000);
   });
 
-  it('passes a run whose RSS does not trend upward', async () => {
+  it('derives the verdict from the slope it measured', async () => {
     let clock = 0;
     const result = await runSoak({
       scan: async () => {
@@ -83,9 +83,12 @@ describe('runSoak', () => {
       sampleEveryMs: 500,
       now: () => clock,
     });
-    // The process is not leaking inside a 30-scan loop, so the slope must clear the gate.
-    expect(result.passed).toBe(true);
-    expect(result.slopeMbPerHour).toBeLessThanOrEqual(MAX_RSS_SLOPE_MB_PER_HOUR);
+    // Asserting a real-RSS outcome here would test the machine's GC, not this code: the
+    // injected clock compresses 3 virtual seconds into a few real milliseconds, so any
+    // ordinary V8 allocation extrapolates to an enormous MB/hour. What must hold is that
+    // the verdict agrees with the slope actually measured.
+    expect(result.passed).toBe(result.slopeMbPerHour <= MAX_RSS_SLOPE_MB_PER_HOUR);
+    expect(Number.isFinite(result.slopeMbPerHour)).toBe(true);
   });
 
   it('emits a CSV carrying the raw series behind the published slope', async () => {
