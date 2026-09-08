@@ -74,6 +74,7 @@ export interface ConfigurationResult {
   configuration: TierConfiguration;
   categories: CategoryRow[];
   falsePositiveRate: number;
+  blockRateOnBenign: number;
   trueNegativeRate: number;
   paraphraseConsistency: number;
   latency: LatencyColumns;
@@ -180,16 +181,24 @@ export function renderReport(input: ReportInput): string {
     lines.push('### Headline metrics by tier configuration (§5)');
     lines.push('');
     lines.push(
-      '| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |',
+      '| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |',
     );
-    lines.push('|---|---|---|---|---|---|');
+    lines.push('|---|---|---|---|---|---|---|');
     for (const r of c.results) {
       const consistency = c.corpus.hasParaphraseGroups ? num(r.paraphraseConsistency) : 'n/a';
       lines.push(
-        `| \`${r.configuration}\` | ${pct(r.falsePositiveRate)} | ${pct(r.trueNegativeRate)} | ` +
-          `${consistency} | ${pct(r.tier2FiringRate)} | ${pct(r.tierDisagreementRate)} |`,
+        `| \`${r.configuration}\` | ${pct(r.falsePositiveRate)} | ${pct(r.blockRateOnBenign)} | ` +
+          `${pct(r.trueNegativeRate)} | ${consistency} | ${pct(r.tier2FiringRate)} | ` +
+          `${pct(r.tierDisagreementRate)} |`,
       );
     }
+    lines.push('');
+    lines.push(
+      '`FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard ' +
+        'blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default ' +
+        '`warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only ' +
+        'the first column would read as though those requests were turned away.',
+    );
     lines.push('');
     if (!c.corpus.hasParaphraseGroups) {
       lines.push(

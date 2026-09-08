@@ -14,6 +14,7 @@ function configResult(over: Partial<ConfigurationResult> = {}): ConfigurationRes
       { category: 'benign', precision: 0, recall: 0, f1: 0, support: 0 },
     ],
     falsePositiveRate: 0.04,
+    blockRateOnBenign: 0.01,
     trueNegativeRate: 0.96,
     paraphraseConsistency: 0.97,
     latency: { cold_first_call_ms: 12, warm_p50_ms: 1.1, warm_p95_ms: 2.4, warm_p99_ms: 3.9 },
@@ -73,6 +74,14 @@ describe('renderReport (protocol §3/§5 — nothing hidden)', () => {
 
   it('shows FPR on benign as a first-class column, never hidden', () => {
     expect(report()).toMatch(/FPR/);
+  });
+
+  it('separates blocked-on-benign from flagged-on-benign', () => {
+    // Tier 2 is capped at `warn`, so FPR and block rate diverge; publishing only FPR
+    // would read as though every flagged request had been refused.
+    const out = report();
+    expect(out).toContain('Blocked on benign');
+    expect(out).toMatch(/1\.00%/);
   });
 
   it('reports all four latency columns without collapsing them', () => {

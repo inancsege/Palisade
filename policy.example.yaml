@@ -49,7 +49,15 @@ detection:
   tier2:
     enabled: true
     threshold: 0.75
-    action: block
+    # What Tier 2 evidence ALONE may escalate to. Tier 1 blocks on its own pattern
+    # evidence regardless; this caps only what the ML classifier can add.
+    # 'warn' keeps the blocked-on-benign rate at Tier 1's ~1.7%. Setting 'block'
+    # raises measured recall no further but takes ~15% of benign traffic to a hard
+    # block — see BENCHMARK.md before changing it.
+    action: warn
+    # Tier 1 scores are effectively binary (a pattern matches or nothing does), so the
+    # band floor is 0: the inputs Tier 2 can help with are the ones Tier 1 scored 0 on.
+    ambiguous_band: [0, 0.7]
   tier3:
     enabled: false
     action: block

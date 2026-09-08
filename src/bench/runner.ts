@@ -26,6 +26,7 @@ export async function evaluateCorpus(entries: CorpusEntry[], detect: Detect): Pr
       category: entry.category,
       paraphraseOf: entry.paraphraseOf,
       detected: result.action !== 'allow',
+      action: result.action,
       latencyMs: result.latencyMs,
     });
   }

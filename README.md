@@ -165,39 +165,64 @@ Numbers come from the **pre-registered** protocol in [`docs/benchmark-protocol.m
 which fixed the corpora, split and metric set *before* any result was measured. Regenerate with
 `npm run benchmark`; the full per-corpus tables live in [`BENCHMARK.md`](BENCHMARK.md).
 
-All four registered corpora, eval splits only, pinned seed `20260603`, Windows / i7-12700H / Node v24:
+All four registered corpora, eval splits only, pinned seed `20260603`, Windows / i7-12700H / Node v24.
+`FPR` counts any non-allow verdict; `Blocked` counts hard blocks only — they differ because Tier 2
+escalation is capped at `tier2.action` (default `warn`):
 
-| Corpus | Source | train_overlap | Eval | Recall (`tier1+2+3`) | Precision | FPR on benign |
+| Corpus | train_overlap | Eval | Recall `tier1` | Recall `tier1+2` | FPR `tier1+2` | **Blocked on benign** |
 |---|---|---|---|---|---|---|
-| **C4** | repo-authored held-out | **none** | 168 | 0.6514 | 1.0000 | 1.69% |
-| C3 | AgentDojo `important_instructions` | none (unverified) | 82 | 0.3333 | 1.0000 | 1.64% |
-| C2 | Lakera `gandalf_ignore_instructions` | **partial — contaminated** | 150 | 0.2935 | 1.0000 | 0.00% |
-| C1 | deepset `prompt-injections` | **partial — contaminated** | 93 | 0.1000 | 1.0000 | 0.00% |
+| **C4** | **none** | 168 | 0.6422 | **0.9816** | 15.25% | **1.69%** (unchanged) |
+| C3 | none (unverified) | 82 | 0.3333 | **0.8095** | 16.39% | **1.64%** (unchanged) |
+| C2 | **partial — contaminated** | 150 | 0.2935 | **1.0000** | 15.52% | **0.00%** (unchanged) |
+| C1 | **partial — contaminated** | 93 | 0.1000 | 0.4200 | 0.00% | 0.00% (unchanged) |
 
 C1 and C2 are public corpora the Tier 2 model was very likely trained on, so their rows are an
 **in-distribution** result and never a headline. Only C4 (and, weakly, C3) is `train_overlap: none`.
+C1 is German; the Tier 2 model is English-only, which is what its 0.4200 reflects.
 
-**Tier 2 currently earns very little.** Across all four corpora it fires on 4.17% / 8.54% / 0.00% /
-2.15% of inputs (C4/C3/C2/C1) and changes exactly **one verdict** in 493 evaluated entries — an
-`encoded_payload` catch on C4 that lifts that category's recall 0.7931 → 0.8276 and end-to-end
-paraphrase consistency 0.6490 → 0.6573. On C1, C2 and C3, `tier1+2` is identical to `tier1` to four
-decimals. That is the cost of a 738MB download and a p99 of ~39 ms, and it is the strongest argument
-in this repo for revisiting the ambiguous band the cascade gates on.
+**How the cascade was fixed.** Tier 2 used to fire on 3-4% of traffic and change one verdict in 493
+entries. Two things were wrong, and both had to go:
 
-Per-category recall on C4, `tier1+2+3` — precision is 1.0000 in every attack category, so these are
-misses, not false alarms:
+1. **The ambiguous band floor was 0.3.** Tier 1 does not grade risk — it either matches a pattern
+   (scoring well above the block threshold) or matches nothing (scoring exactly 0). On the
+   calibration split only 4 of 62 attacks and *zero* benign entries landed in `[0.3, 0.7]`, so the
+   floor gated Tier 2 out of the only inputs it could help with. The default floor is now `0`.
+2. **`computeVerdict` returned `allow` whenever Tier 1's match count was 0** — discarding the fused
+   score entirely. Tier 2 could return 1.000 on an obvious attack and the request was allowed. It now
+   takes an explicit flag for higher-tier evidence.
 
-| Category | Recall | F1 | Support |
-|---|---|---|---|
-| role_marker | 0.9375 | 0.9677 | 16 |
-| encoded_payload | 0.8276 | 0.9057 | 29 |
-| delimiter_escape | 0.6250 | 0.7692 | 16 |
-| exfiltration | 0.5417 | 0.7027 | 24 |
-| override_phrase | 0.3750 | 0.5455 | 24 |
+Fixing only the first raises the Tier 2 firing rate to 82-99% and changes nothing else, which is the
+worst of both worlds: full ML latency, zero benefit.
 
-**Read these honestly.** Recall on `override_phrase` is 0.3750 — the cascade misses most reworded
-override attacks — and 0.1000 on a German-language public corpus. The ~1.7% false-positive rate is
-the number to weigh against those misses. None of this is the 0.978 in
+**Tier 2 warns; it does not block on its own.** Letting it block lifts recall no further but takes
+blocked-benign from ~1.7% to ~15% — one legitimate request in seven refused. So `tier2.action`
+defaults to `warn`: Tier 1 keeps the hard-block decision on its precise pattern evidence, and Tier 2's
+broader, noisier signal is surfaced as a warning. Most of the recall gain above therefore arrives as
+**warnings, not blocks** — on C4, 0.6422 of attacks are blocked and the rest of the 0.9816 are warned.
+Set `tier2.action: block` if you want the trade the other way; the numbers to weigh are in
+[`BENCHMARK.md`](BENCHMARK.md).
+
+Per-category recall on C4, `tier1+2+3` — precision is 1.0000 in every attack category (benign false
+positives are counted separately, in the FPR column above):
+
+| Category | Recall `tier1` | Recall `tier1+2+3` | F1 | Support |
+|---|---|---|---|---|
+| role_marker | 0.9375 | **1.0000** | 1.0000 | 16 |
+| delimiter_escape | 0.6250 | **1.0000** | 1.0000 | 16 |
+| override_phrase | 0.3750 | **1.0000** | 1.0000 | 24 |
+| encoded_payload | 0.7931 | **0.9655** | 0.9825 | 29 |
+| exfiltration | 0.5417 | **0.9583** | 0.9787 | 24 |
+
+`override_phrase` — reworded "ignore previous instructions" attacks, the category Tier 1 was worst at —
+goes from 0.3750 to 1.0000. That is the case the ML tier exists for.
+
+**What it costs.** Tier 2 now runs on 61-99% of traffic instead of 3-4%, and median latency goes from
+0.02 ms to **24.55 ms** (p95 38.19 ms, p99 49.44 ms) on `tier1+2`. That is the honest price of the
+recall above: a local ONNX inference on most requests. Tier 1 alone remains at 0.02 ms p50 if you
+leave Tier 2 disabled, which is still the default.
+
+**Read these honestly.** The C1 row is 0.4200 because the model is English-only and that corpus is
+German. Recall gains land mostly as warnings rather than blocks. And none of this is the 0.978 in
 [`docs/tier2-bakeoff.md`](docs/tier2-bakeoff.md): that gate scored the Tier 2 model in isolation over
 a whole corpus, and the two are not comparable.
 
@@ -210,11 +235,12 @@ stands as measured because changing a pre-registered estimator after seeing the 
 decision, and the raw series is committed under `bench/results/soak/` so that call can be made on
 evidence.
 
-**Reproducibility (§7).** These C4 detection numbers are byte-identical to the previously published
-Apple M3 / Node v22 run — every per-category recall, F1, FPR and TNR matches to four decimals across
-a different OS, CPU and Node major. Only latency differs. Corpora C1–C3 are snapshotted at pinned
-upstream revisions and their sha256 is re-verified on every run, so a drifted corpus aborts the run
-rather than quietly changing a number.
+**Reproducibility (§7).** Before the cascade change above, this machine (Windows / i7-12700H / Node
+v24) reproduced the previously published Apple M3 / Node v22 C4 numbers exactly — every per-category
+recall, F1, FPR and TNR identical to four decimals across a different OS, CPU and Node major, with
+only latency differing. The current numbers supersede those, because detection behaviour itself
+changed. Corpora C1–C3 are snapshotted at pinned upstream revisions and their sha256 is re-verified
+on every run, so a drifted corpus aborts the run rather than quietly changing a number.
 
 ## Architecture
 

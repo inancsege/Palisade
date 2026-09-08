@@ -14,7 +14,7 @@ export const defaultPolicy: PolicyConfig = {
       enabled: false,
       threshold: 0.75,
       action: 'warn',
-      ambiguous_band: [0.3, 0.7],
+      ambiguous_band: [0, 0.7],
       calibration: { temperature: 1.0, bias: 0 },
       max_input_chars: 4000,
     },

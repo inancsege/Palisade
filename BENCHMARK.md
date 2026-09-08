@@ -27,11 +27,13 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 ### Headline metrics by tier configuration (§5)
 
-| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
-|---|---|---|---|---|---|
-| `tier1` | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
-| `tier1+2` | 0.00% | 100.00% | n/a | 2.15% | 0.00% |
-| `tier1+2+3` | 0.00% | 100.00% | n/a | 2.15% | 0.00% |
+| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+|---|---|---|---|---|---|---|
+| `tier1` | 0.00% | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
+| `tier1+2` | 0.00% | 0.00% | 100.00% | n/a | 94.62% | 0.00% |
+| `tier1+2+3` | 0.00% | 0.00% | 100.00% | n/a | 94.62% | 0.00% |
+
+`FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
 
 `n/a`: this corpus ships no paraphrase groups, so paraphrase consistency is undefined over it. It is not zero — it is unmeasurable, and reporting 0.0000 here would be a lie.
 
@@ -39,9 +41,9 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 3.85 | 0.02 | 0.15 | 1.73 |
-| `tier1+2` | 0.33 | 0.02 | 0.14 | 92.75 |
-| `tier1+2+3` | 3.95 | 0.03 | 0.15 | 76.21 |
+| `tier1` | 2.85 | 0.02 | 0.15 | 1.80 |
+| `tier1+2` | 24.30 | 25.59 | 100.59 | 143.55 |
+| `tier1+2+3` | 23.51 | 24.36 | 74.52 | 141.09 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
@@ -57,24 +59,26 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
 | benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| injection | 1.0000 | 0.1000 | 0.1818 | 50 |
+| injection | 1.0000 | 0.4200 | 0.5915 | 50 |
 
 #### `tier1+2+3`
 
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
 | benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| injection | 1.0000 | 0.1000 | 0.1818 | 50 |
+| injection | 1.0000 | 0.4200 | 0.5915 | 50 |
 
 ## `C2` — Lakera/gandalf_ignore_instructions (test split) (train_overlap: partial)
 
 ### Headline metrics by tier configuration (§5)
 
-| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
-|---|---|---|---|---|---|
-| `tier1` | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
-| `tier1+2` | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
-| `tier1+2+3` | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
+| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+|---|---|---|---|---|---|---|
+| `tier1` | 0.00% | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
+| `tier1+2` | 15.52% | 0.00% | 84.48% | n/a | 82.00% | 0.00% |
+| `tier1+2+3` | 15.52% | 0.00% | 84.48% | n/a | 82.00% | 0.00% |
+
+`FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
 
 `n/a`: this corpus ships no paraphrase groups, so paraphrase consistency is undefined over it. It is not zero — it is unmeasurable, and reporting 0.0000 here would be a lie.
 
@@ -82,9 +86,9 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 0.05 | 0.02 | 0.04 | 0.07 |
-| `tier1+2` | 0.27 | 0.03 | 0.07 | 0.15 |
-| `tier1+2+3` | 3.78 | 0.03 | 0.07 | 2.18 |
+| `tier1` | 2.32 | 0.02 | 0.04 | 1.16 |
+| `tier1+2` | 38.11 | 25.14 | 39.41 | 45.55 |
+| `tier1+2+3` | 37.87 | 24.51 | 38.16 | 46.78 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
@@ -100,24 +104,26 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
 | benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| override_phrase | 1.0000 | 0.2935 | 0.4538 | 92 |
+| override_phrase | 1.0000 | 1.0000 | 1.0000 | 92 |
 
 #### `tier1+2+3`
 
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
 | benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| override_phrase | 1.0000 | 0.2935 | 0.4538 | 92 |
+| override_phrase | 1.0000 | 1.0000 | 1.0000 | 92 |
 
 ## `C3` — AgentDojo important_instructions attack strings (train_overlap: none)
 
 ### Headline metrics by tier configuration (§5)
 
-| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
-|---|---|---|---|---|---|
-| `tier1` | 1.64% | 98.36% | n/a | 0.00% | 0.00% |
-| `tier1+2` | 1.64% | 98.36% | n/a | 8.54% | 0.00% |
-| `tier1+2+3` | 1.64% | 98.36% | n/a | 8.54% | 0.00% |
+| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+|---|---|---|---|---|---|---|
+| `tier1` | 1.64% | 1.64% | 98.36% | n/a | 0.00% | 0.00% |
+| `tier1+2` | 16.39% | 1.64% | 83.61% | n/a | 98.78% | 0.00% |
+| `tier1+2+3` | 16.39% | 1.64% | 83.61% | n/a | 98.78% | 0.00% |
+
+`FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
 
 `n/a`: this corpus ships no paraphrase groups, so paraphrase consistency is undefined over it. It is not zero — it is unmeasurable, and reporting 0.0000 here would be a lie.
 
@@ -125,9 +131,9 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 2.09 | 0.03 | 0.10 | 1.22 |
-| `tier1+2` | 0.32 | 0.04 | 82.73 | 87.83 |
-| `tier1+2+3` | 3.81 | 0.05 | 82.56 | 92.62 |
+| `tier1` | 1.79 | 0.03 | 0.10 | 1.09 |
+| `tier1+2` | 53.67 | 34.53 | 97.21 | 124.46 |
+| `tier1+2+3` | 30.60 | 34.56 | 95.55 | 125.82 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
@@ -143,32 +149,34 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
 | benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| role_marker | 1.0000 | 0.3333 | 0.5000 | 21 |
+| role_marker | 1.0000 | 0.8095 | 0.8947 | 21 |
 
 #### `tier1+2+3`
 
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
 | benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| role_marker | 1.0000 | 0.3333 | 0.5000 | 21 |
+| role_marker | 1.0000 | 0.8095 | 0.8947 | 21 |
 
 ## `C4` — Palisade held-out adversarial set (train_overlap: none)
 
 ### Headline metrics by tier configuration (§5)
 
-| Configuration | FPR on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
-|---|---|---|---|---|---|
-| `tier1` | 1.69% | 98.31% | 0.6490 | 0.00% | 0.00% |
-| `tier1+2` | 1.69% | 98.31% | 0.6573 | 4.17% | 0.00% |
-| `tier1+2+3` | 1.69% | 98.31% | 0.6573 | 4.17% | 0.00% |
+| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+|---|---|---|---|---|---|---|
+| `tier1` | 1.69% | 1.69% | 98.31% | 0.6490 | 0.00% | 0.00% |
+| `tier1+2` | 15.25% | 1.69% | 84.75% | 0.9833 | 61.31% | 0.00% |
+| `tier1+2+3` | 15.25% | 1.69% | 84.75% | 0.9833 | 61.31% | 0.00% |
+
+`FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
 
 ### Latency — 4 columns, never collapsed (§5)
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 1.96 | 0.02 | 0.06 | 1.06 |
-| `tier1+2` | 0.15 | 0.03 | 0.10 | 43.17 |
-| `tier1+2+3` | 3.29 | 0.04 | 1.77 | 34.53 |
+| `tier1` | 1.93 | 0.02 | 0.04 | 0.99 |
+| `tier1+2` | 0.12 | 24.55 | 38.19 | 49.44 |
+| `tier1+2+3` | 3.24 | 24.06 | 41.37 | 65.48 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
@@ -188,26 +196,26 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
 | benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| delimiter_escape | 1.0000 | 0.6250 | 0.7692 | 16 |
-| encoded_payload | 1.0000 | 0.8276 | 0.9057 | 29 |
-| exfiltration | 1.0000 | 0.5417 | 0.7027 | 24 |
-| override_phrase | 1.0000 | 0.3750 | 0.5455 | 24 |
-| role_marker | 1.0000 | 0.9375 | 0.9677 | 16 |
+| delimiter_escape | 1.0000 | 1.0000 | 1.0000 | 16 |
+| encoded_payload | 1.0000 | 0.9655 | 0.9825 | 29 |
+| exfiltration | 1.0000 | 0.9583 | 0.9787 | 24 |
+| override_phrase | 1.0000 | 1.0000 | 1.0000 | 24 |
+| role_marker | 1.0000 | 1.0000 | 1.0000 | 16 |
 
 #### `tier1+2+3`
 
 | Category | Precision | Recall | F1 | Support (attacks) |
 |---|---|---|---|---|
 | benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| delimiter_escape | 1.0000 | 0.6250 | 0.7692 | 16 |
-| encoded_payload | 1.0000 | 0.8276 | 0.9057 | 29 |
-| exfiltration | 1.0000 | 0.5417 | 0.7027 | 24 |
-| override_phrase | 1.0000 | 0.3750 | 0.5455 | 24 |
-| role_marker | 1.0000 | 0.9375 | 0.9677 | 16 |
+| delimiter_escape | 1.0000 | 1.0000 | 1.0000 | 16 |
+| encoded_payload | 1.0000 | 0.9655 | 0.9825 | 29 |
+| exfiltration | 1.0000 | 0.9583 | 0.9787 | 24 |
+| override_phrase | 1.0000 | 1.0000 | 1.0000 | 24 |
+| role_marker | 1.0000 | 1.0000 | 1.0000 | 16 |
 
 ## Reading the paraphrase-consistency column
 
-The pre-registered ship threshold of **≥ 0.75** (D03/D04) was defined for the Tier 2 MODEL scored in isolation over the whole corpus — that gate was measured at **0.978** and is recorded in `docs/tier2-bakeoff.md`. The C4 column above measures something different: the END-TO-END CASCADE, in which Tier 2 only sees inputs that land in the ambiguous band (4.17% of the C4 eval split). The two numbers are not comparable, and the cascade figure is NOT a failure of the D03/D04 gate. It is reported because §5 locks paraphrase consistency as a required metric.
+The pre-registered ship threshold of **≥ 0.75** (D03/D04) was defined for the Tier 2 MODEL scored in isolation over the whole corpus — that gate was measured at **0.978** and is recorded in `docs/tier2-bakeoff.md`. The C4 column above measures something different: the END-TO-END CASCADE, in which Tier 2 only sees inputs that land in the ambiguous band (61.31% of the C4 eval split). The two numbers are not comparable, and the cascade figure is NOT a failure of the D03/D04 gate. It is reported because §5 locks paraphrase consistency as a required metric.
 
 ## Soak test — RSS slope (§5)
 

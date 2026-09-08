@@ -43,9 +43,9 @@ describe('tier2 policy schema (v0.2 extension)', () => {
     it('loads the shipped policy.example.yaml under the v0.2 schema', () => {
       const policy = loadPolicy(EXAMPLE_POLICY_PATH);
       // v0.1 example sets tier2.{enabled,threshold,action}; v0.2 defaults fill the rest.
-      expect(policy.detection.tier2.action).toBe('block');
+      expect(policy.detection.tier2.action).toBe('warn');
       expect(policy.detection.tier2.threshold).toBe(0.75);
-      expect(policy.detection.tier2.ambiguous_band).toEqual([0.3, 0.7]);
+      expect(policy.detection.tier2.ambiguous_band).toEqual([0, 0.7]);
       expect(policy.detection.tier2.calibration).toEqual({ temperature: 1.0, bias: 0 });
       expect(policy.detection.tier2.max_input_chars).toBe(4000);
     });
@@ -94,7 +94,7 @@ describe('tier2 policy schema (v0.2 extension)', () => {
   describe('defaults flow through mergePolicyWithDefaults', () => {
     it('fills in tier2 v0.2 defaults while keeping v0.1 fields', () => {
       const merged = mergePolicyWithDefaults({ version: '1' });
-      expect(merged.detection.tier2.ambiguous_band).toEqual([0.3, 0.7]);
+      expect(merged.detection.tier2.ambiguous_band).toEqual([0, 0.7]);
       expect(merged.detection.tier2.calibration).toEqual({ temperature: 1.0, bias: 0 });
       expect(merged.detection.tier2.max_input_chars).toBe(4000);
       expect(merged.detection.tier2.enabled).toBe(false);
@@ -110,15 +110,15 @@ describe('tier2 policy schema (v0.2 extension)', () => {
       expect(merged.detection.tier2.enabled).toBe(true);
       expect(merged.detection.tier2.max_input_chars).toBe(8000);
       // unsupplied fields still fall back to defaults
-      expect(merged.detection.tier2.ambiguous_band).toEqual([0.3, 0.7]);
+      expect(merged.detection.tier2.ambiguous_band).toEqual([0, 0.7]);
       expect(merged.detection.tier2.calibration).toEqual({ temperature: 1.0, bias: 0 });
     });
   });
 
   describe('cross-field ambiguous_band validation (post-merge)', () => {
-    it('accepts the default cascade band [0.3, 0.7] under default T1 thresholds', () => {
+    it('accepts the default cascade band [0, 0.7] under default T1 thresholds', () => {
       const result = validateAndMerge({ version: '1' });
-      expect(result.detection.tier2.ambiguous_band).toEqual([0.3, 0.7]);
+      expect(result.detection.tier2.ambiguous_band).toEqual([0, 0.7]);
     });
 
     it('accepts a monotonic band within the T1 cascade window', () => {

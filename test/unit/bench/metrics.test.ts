@@ -3,6 +3,7 @@ import {
   confusionFor,
   percentile,
   perCategoryF1,
+  blockRateOnBenign,
   falsePositiveRate,
   trueNegativeRate,
   paraphraseConsistency,
@@ -16,6 +17,7 @@ function p(over: Partial<Prediction> = {}): Prediction {
     category: 'override_phrase',
     paraphraseOf: null,
     detected: true,
+    action: 'block',
     latencyMs: 1,
     ...over,
   };
@@ -149,5 +151,24 @@ describe('percentile (§5 — 4 latency columns, never collapsed)', () => {
 
   it('returns 0 for an empty sample', () => {
     expect(percentile([], 95)).toBe(0);
+  });
+});
+
+describe('blockRateOnBenign', () => {
+  it('counts only hard blocks, not warnings', () => {
+    // Tier 2 escalation is capped at `warn`, so a config can carry a high FPR while
+    // blocking nothing. Reporting FPR alone would read as though those were refused.
+    const predictions = [
+      p({ label: 'benign', category: 'benign', detected: true, action: 'warn' }),
+      p({ label: 'benign', category: 'benign', detected: true, action: 'warn' }),
+      p({ label: 'benign', category: 'benign', detected: true, action: 'block' }),
+      p({ label: 'benign', category: 'benign', detected: false, action: 'allow' }),
+    ];
+    expect(falsePositiveRate(predictions)).toBeCloseTo(0.75, 6);
+    expect(blockRateOnBenign(predictions)).toBeCloseTo(0.25, 6);
+  });
+
+  it('is 0 with no benign entries rather than NaN', () => {
+    expect(blockRateOnBenign([p({ label: 'attack' })])).toBe(0);
   });
 });

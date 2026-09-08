@@ -11,6 +11,8 @@ export interface Prediction {
   paraphraseOf: string | null;
   /** Whether the detector flagged this entry (action !== 'allow'). */
   detected: boolean;
+  /** The verdict itself. A warn and a block are both "detected" but differ operationally. */
+  action: 'allow' | 'warn' | 'block';
   latencyMs: number;
 }
 
@@ -88,6 +90,18 @@ export function perCategoryF1(predictions: Prediction[]): CategoryRow[] {
 export function falsePositiveRate(predictions: Prediction[]): number {
   const benign = predictions.filter((p) => p.label === 'benign');
   return ratio(benign.filter((p) => p.detected).length, benign.length);
+}
+
+/**
+ * Share of BENIGN entries HARD-BLOCKED, as opposed to merely flagged.
+ *
+ * FPR counts warnings and blocks alike, which understates how disruptive a configuration
+ * is — or overstates it. A tier capped at `warn` can carry a high FPR while blocking
+ * nothing, and reporting only FPR would read as though those requests were refused.
+ */
+export function blockRateOnBenign(predictions: Prediction[]): number {
+  const benign = predictions.filter((p) => p.label === 'benign');
+  return ratio(benign.filter((p) => p.action === 'block').length, benign.length);
 }
 
 /** Specificity — paired to TPR and always reported alongside FPR. */

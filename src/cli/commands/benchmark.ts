@@ -8,6 +8,7 @@ import { printBanner } from '../output.js';
 import { loadRegisteredCorpus, selectCorpora } from '../../bench/corpora.js';
 import { PINNED_SEED, splitCorpus } from '../../bench/split.js';
 import {
+  blockRateOnBenign,
   falsePositiveRate,
   latencyColumns,
   paraphraseConsistency,
@@ -112,6 +113,7 @@ export const benchmarkCommand = new Command('benchmark')
           configuration,
           categories: perCategoryF1(predictions),
           falsePositiveRate: falsePositiveRate(predictions),
+          blockRateOnBenign: blockRateOnBenign(predictions),
           trueNegativeRate: trueNegativeRate(predictions),
           paraphraseConsistency: paraphraseConsistency(predictions),
           latency: latencyColumns(predictions.map((p) => p.latencyMs)),
