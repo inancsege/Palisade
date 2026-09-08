@@ -10,10 +10,13 @@ function configResult(over: Partial<ConfigurationResult> = {}): ConfigurationRes
   return {
     configuration: 'tier1',
     categories: [
-      { category: 'override_phrase', precision: 1, recall: 0.9, f1: 0.95, support: 10 },
-      { category: 'benign', precision: 0, recall: 0, f1: 0, support: 0 },
+      { category: 'override_phrase', precision: 1, recall: 0.9, f1: 0.95, support: 10, recallCi: [0.6, 0.98] },
+      { category: 'benign', precision: 0, recall: 0, f1: 0, support: 0, recallCi: [0, 0] },
     ],
     falsePositiveRate: 0.04,
+    falsePositiveRateCi: [0.01, 0.12],
+    overallRecall: 0.9,
+    overallRecallCi: [0.6, 0.98],
     blockRateOnBenign: 0.01,
     trueNegativeRate: 0.96,
     paraphraseConsistency: 0.97,

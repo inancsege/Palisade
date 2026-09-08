@@ -4,6 +4,7 @@ import {
   percentile,
   perCategoryF1,
   blockRateOnBenign,
+  wilsonInterval,
   falsePositiveRate,
   trueNegativeRate,
   paraphraseConsistency,
@@ -170,5 +171,27 @@ describe('blockRateOnBenign', () => {
 
   it('is 0 with no benign entries rather than NaN', () => {
     expect(blockRateOnBenign([p({ label: 'attack' })])).toBe(0);
+  });
+});
+
+describe('wilsonInterval', () => {
+  it('keeps a perfect score honest at small n', () => {
+    // 16/16 is not evidence of 100% — the interval is what stops a table from claiming it.
+    const [lo, hi] = wilsonInterval(16, 16);
+    expect(hi).toBeCloseTo(1, 6);
+    expect(lo).toBeLessThan(0.85);
+    expect(lo).toBeGreaterThan(0.75);
+  });
+
+  it('narrows as the sample grows', () => {
+    const small = wilsonInterval(80, 100);
+    const large = wilsonInterval(800, 1000);
+    expect(large[1] - large[0]).toBeLessThan(small[1] - small[0]);
+  });
+
+  it('stays inside [0,1] at the endpoints and returns [0,0] for an empty sample', () => {
+    expect(wilsonInterval(0, 10)[0]).toBe(0);
+    expect(wilsonInterval(10, 10)[1]).toBe(1);
+    expect(wilsonInterval(0, 0)).toEqual([0, 0]);
   });
 });

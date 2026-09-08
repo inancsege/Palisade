@@ -166,19 +166,41 @@ which fixed the corpora, split and metric set *before* any result was measured. 
 `npm run benchmark`; the full per-corpus tables live in [`BENCHMARK.md`](BENCHMARK.md).
 
 All four registered corpora, eval splits only, pinned seed `20260603`, Windows / i7-12700H / Node v24.
-`FPR` counts any non-allow verdict; `Blocked` counts hard blocks only — they differ because Tier 2
-escalation is capped at `tier2.action` (default `warn`):
+Every rate carries a 95% Wilson interval — per-category support is 16-29 entries, and a point
+estimate at that size claims more precision than the data holds:
 
-| Corpus | train_overlap | Eval | Recall `tier1` | Recall `tier1+2` | FPR `tier1+2` | **Blocked on benign** |
+| Corpus | train_overlap | Eval | Recall `tier1` | Recall `tier1+2` (95% CI) | FPR `tier1+2` (95% CI) | Blocked on benign |
 |---|---|---|---|---|---|---|
-| **C4** | **none** | 168 | 0.6422 | **0.9816** | 15.25% | **1.69%** (unchanged) |
-| C3 | none (unverified) | 82 | 0.3333 | **0.8095** | 16.39% | **1.64%** (unchanged) |
-| C2 | **partial — contaminated** | 150 | 0.2935 | **1.0000** | 15.52% | **0.00%** (unchanged) |
-| C1 | **partial — contaminated** | 93 | 0.1000 | 0.4200 | 0.00% | 0.00% (unchanged) |
+| **C4** | **none** | 168 | 0.6422 | **0.9817** [0.936, 0.995] | 15.25% [8.24%, 26.52%] | 1.69% (unchanged) |
+| C3 | none (unverified) | 82 | 0.3333 | **0.8095** [0.600, 0.923] | 16.39% [9.16%, 27.61%] | 1.64% (unchanged) |
+| C2 | **partial — contaminated** | 150 | 0.2935 | **1.0000** [0.960, 1.000] | 15.52% [8.38%, 26.93%] | 0.00% (unchanged) |
+| C1 | **partial — contaminated** | 93 | 0.1000 | 0.4200 [0.294, 0.558] | 0.00% [0.00%, 8.20%] | 0.00% (unchanged) |
 
 C1 and C2 are public corpora the Tier 2 model was very likely trained on, so their rows are an
-**in-distribution** result and never a headline. Only C4 (and, weakly, C3) is `train_overlap: none`.
-C1 is German; the Tier 2 model is English-only, which is what its 0.4200 reflects.
+**in-distribution** result and never a headline. C1 is German; the model is English-only.
+
+**Where the false positives actually live.** The FPR above is measured against C4's benign half,
+which deliberately includes injection-shaped near-misses. Against the independent control set
+registered in protocol §2 — JBB-Behaviors' benign split, 100 ordinary prompts, pinned and never
+merged into C4 — the same configuration measures:
+
+| Benign set | n (eval) | FPR `tier1+2` (95% CI) |
+|---|---|---|
+| FP-CONTROL — ordinary prompts | 80 | **1.25%** [0.22%, 6.75%] |
+| C4 benign — includes deliberate near-misses | 59 | **15.25%** [8.24%, 26.52%] |
+
+Tier 2's false positives are not spread across benign traffic; they are concentrated on
+injection-adjacent content. The eight C4 benign entries it flags are things like a sentence
+*describing* override-phrase attacks (0.9993), `messages.push({ role: 'system', ... })` (0.9935),
+a legitimate `curl -H "Authorization: Bearer $TOKEN"` (0.9907), and *"If you want the model to ignore
+formatting in the source document, say so explicitly in your prompt"* (0.9999992). Attack scores have
+p25 = 0.9991, so those benign entries sit **inside the attack distribution** — no threshold separates
+them, and a sweep confirms it (at 0.9999 they still flag and recall falls to 0.7419). The classifier
+cannot distinguish talking about injection from doing injection.
+
+That matters most for the use case this tool ships for: `palisade claude` puts it in front of Claude
+Code, where developers send `role: 'system'`, bearer tokens and questions about prompt injection all
+day. It is the worst possible traffic for this classifier, which is why Tier 2 warns and does not block.
 
 **How the cascade was fixed.** Tier 2 used to fire on 3-4% of traffic and change one verdict in 493
 entries. Two things were wrong, and both had to go:
@@ -198,20 +220,23 @@ worst of both worlds: full ML latency, zero benefit.
 blocked-benign from ~1.7% to ~15% — one legitimate request in seven refused. So `tier2.action`
 defaults to `warn`: Tier 1 keeps the hard-block decision on its precise pattern evidence, and Tier 2's
 broader, noisier signal is surfaced as a warning. Most of the recall gain above therefore arrives as
-**warnings, not blocks** — on C4, 0.6422 of attacks are blocked and the rest of the 0.9816 are warned.
+**warnings, not blocks** — on C4, 0.6422 of attacks are blocked and the rest of the 0.9817 are warned.
 Set `tier2.action: block` if you want the trade the other way; the numbers to weigh are in
 [`BENCHMARK.md`](BENCHMARK.md).
 
 Per-category recall on C4, `tier1+2+3` — precision is 1.0000 in every attack category (benign false
 positives are counted separately, in the FPR column above):
 
-| Category | Recall `tier1` | Recall `tier1+2+3` | F1 | Support |
+| Category | Recall `tier1` | Recall `tier1+2+3` | 95% CI | Support |
 |---|---|---|---|---|
-| role_marker | 0.9375 | **1.0000** | 1.0000 | 16 |
-| delimiter_escape | 0.6250 | **1.0000** | 1.0000 | 16 |
-| override_phrase | 0.3750 | **1.0000** | 1.0000 | 24 |
-| encoded_payload | 0.7931 | **0.9655** | 0.9825 | 29 |
-| exfiltration | 0.5417 | **0.9583** | 0.9787 | 24 |
+| role_marker | 0.9375 | **1.0000** | [0.806, 1.000] | 16 |
+| delimiter_escape | 0.6250 | **1.0000** | [0.806, 1.000] | 16 |
+| override_phrase | 0.3750 | **1.0000** | [0.862, 1.000] | 24 |
+| encoded_payload | 0.7931 | **0.9655** | [0.828, 0.994] | 29 |
+| exfiltration | 0.5417 | **0.9583** | [0.798, 0.993] | 24 |
+
+A recall of 1.0000 on 16 samples has a 95% lower bound of 0.806. Read the intervals: these are
+directional results on small corpora, not precise measurements.
 
 `override_phrase` — reworded "ignore previous instructions" attacks, the category Tier 1 was worst at —
 goes from 0.3750 to 1.0000. That is the case the ML tier exists for.

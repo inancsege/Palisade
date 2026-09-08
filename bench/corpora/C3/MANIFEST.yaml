@@ -6,7 +6,7 @@ language: English
 role: "Agentic-pattern coverage"
 source: "https://github.com/ethz-spylab/agentdojo"
 pinned_revision: 089ed468cf3ed0322acc66b0211f26d9d90dbf60
-snapshot_date: 2026-09-07
+snapshot_date: 2026-09-08
 train_overlap: none
 contamination_note: >
   Agentic tool-use injections rendered from the AgentDojo important_instructions template.

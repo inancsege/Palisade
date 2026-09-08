@@ -11,6 +11,7 @@
 | `C2` | Lakera/gandalf_ignore_instructions (test split) | **partial** | 187 | 150 | `6f9f03b7dee5967b28cf4cbed6f15ab7f168d042d46fe93cd7f725bdc5e94a5d` |
 | `C3` | AgentDojo important_instructions attack strings | **none** | 102 | 82 | `b3a14908af1e5b0ad94d060a07353756fc780ce11c4de8a579dfc4ba8545097e` |
 | `C4` | Palisade held-out adversarial set | **none** | 210 | 168 | `245c6b9029ff9b63f87984632ccccd72edacb0d9933f55e6bc0605212f054e96` |
+| `FP-CONTROL` | JBB-Behaviors benign half (independent FP control) | **none** | 100 | 80 | `04a4c0058be2e9277e9e6cf8d275754e391655331bfadd1b5d3d05a4bc98a4f6` |
 
 | Field | Value |
 |---|---|
@@ -21,17 +22,17 @@
 | CPU | 12th Gen Intel(R) Core(TM) i7-12700H (20 cores) |
 | onnxruntime-node (effective) | 1.21.0 |
 
-Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4`. `C1`, `C2` are **contaminated** — the Tier 2 model was very likely trained on overlapping public data, so those rows are an **in-distribution** result, reported side-by-side for transparency only and never as a headline.
+Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4`, `FP-CONTROL`. `C1`, `C2` are **contaminated** — the Tier 2 model was very likely trained on overlapping public data, so those rows are an **in-distribution** result, reported side-by-side for transparency only and never as a headline.
 
 ## `C1` — deepset/prompt-injections (test split) (train_overlap: partial)
 
 ### Headline metrics by tier configuration (§5)
 
-| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+| Configuration | Recall (95% CI) | FPR on benign (95% CI) | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate |
 |---|---|---|---|---|---|---|
-| `tier1` | 0.00% | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
-| `tier1+2` | 0.00% | 0.00% | 100.00% | n/a | 94.62% | 0.00% |
-| `tier1+2+3` | 0.00% | 0.00% | 100.00% | n/a | 94.62% | 0.00% |
+| `tier1` | 0.1000 [0.043, 0.214] | 0.00% [0.00%, 8.20%] | 0.00% | 100.00% | n/a | 0.00% |
+| `tier1+2` | 0.4200 [0.294, 0.558] | 0.00% [0.00%, 8.20%] | 0.00% | 100.00% | n/a | 94.62% |
+| `tier1+2+3` | 0.4200 [0.294, 0.558] | 0.00% [0.00%, 8.20%] | 0.00% | 100.00% | n/a | 94.62% |
 
 `FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
 
@@ -41,42 +42,44 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 2.85 | 0.02 | 0.15 | 1.80 |
-| `tier1+2` | 24.30 | 25.59 | 100.59 | 143.55 |
-| `tier1+2+3` | 23.51 | 24.36 | 74.52 | 141.09 |
+| `tier1` | 2.82 | 0.02 | 0.15 | 1.58 |
+| `tier1+2` | 28.42 | 25.08 | 82.35 | 182.67 |
+| `tier1+2+3` | 23.09 | 26.52 | 76.85 | 183.41 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
+Support per category runs to a few dozen entries, so read the intervals, not the point estimates: a recall of 1.0000 on 16 samples has a 95% lower bound near 0.80. These are directional results on small corpora, not precise measurements.
+
 #### `tier1`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| injection | 1.0000 | 0.1000 | 0.1818 | 50 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| injection | 1.0000 | 0.1000 | [0.043, 0.214] | 0.1818 | 50 |
 
 #### `tier1+2`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| injection | 1.0000 | 0.4200 | 0.5915 | 50 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| injection | 1.0000 | 0.4200 | [0.294, 0.558] | 0.5915 | 50 |
 
 #### `tier1+2+3`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| injection | 1.0000 | 0.4200 | 0.5915 | 50 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| injection | 1.0000 | 0.4200 | [0.294, 0.558] | 0.5915 | 50 |
 
 ## `C2` — Lakera/gandalf_ignore_instructions (test split) (train_overlap: partial)
 
 ### Headline metrics by tier configuration (§5)
 
-| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+| Configuration | Recall (95% CI) | FPR on benign (95% CI) | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate |
 |---|---|---|---|---|---|---|
-| `tier1` | 0.00% | 0.00% | 100.00% | n/a | 0.00% | 0.00% |
-| `tier1+2` | 15.52% | 0.00% | 84.48% | n/a | 82.00% | 0.00% |
-| `tier1+2+3` | 15.52% | 0.00% | 84.48% | n/a | 82.00% | 0.00% |
+| `tier1` | 0.2935 [0.210, 0.393] | 0.00% [0.00%, 6.21%] | 0.00% | 100.00% | n/a | 0.00% |
+| `tier1+2` | 1.0000 [0.960, 1.000] | 15.52% [8.38%, 26.93%] | 0.00% | 84.48% | n/a | 82.00% |
+| `tier1+2+3` | 1.0000 [0.960, 1.000] | 15.52% [8.38%, 26.93%] | 0.00% | 84.48% | n/a | 82.00% |
 
 `FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
 
@@ -86,42 +89,44 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 2.32 | 0.02 | 0.04 | 1.16 |
-| `tier1+2` | 38.11 | 25.14 | 39.41 | 45.55 |
-| `tier1+2+3` | 37.87 | 24.51 | 38.16 | 46.78 |
+| `tier1` | 2.33 | 0.02 | 0.05 | 1.19 |
+| `tier1+2` | 35.15 | 24.64 | 39.29 | 52.63 |
+| `tier1+2+3` | 39.37 | 26.33 | 41.84 | 45.57 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
+Support per category runs to a few dozen entries, so read the intervals, not the point estimates: a recall of 1.0000 on 16 samples has a 95% lower bound near 0.80. These are directional results on small corpora, not precise measurements.
+
 #### `tier1`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| override_phrase | 1.0000 | 0.2935 | 0.4538 | 92 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| override_phrase | 1.0000 | 0.2935 | [0.210, 0.393] | 0.4538 | 92 |
 
 #### `tier1+2`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| override_phrase | 1.0000 | 1.0000 | 1.0000 | 92 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| override_phrase | 1.0000 | 1.0000 | [0.960, 1.000] | 1.0000 | 92 |
 
 #### `tier1+2+3`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| override_phrase | 1.0000 | 1.0000 | 1.0000 | 92 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| override_phrase | 1.0000 | 1.0000 | [0.960, 1.000] | 1.0000 | 92 |
 
 ## `C3` — AgentDojo important_instructions attack strings (train_overlap: none)
 
 ### Headline metrics by tier configuration (§5)
 
-| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+| Configuration | Recall (95% CI) | FPR on benign (95% CI) | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate |
 |---|---|---|---|---|---|---|
-| `tier1` | 1.64% | 1.64% | 98.36% | n/a | 0.00% | 0.00% |
-| `tier1+2` | 16.39% | 1.64% | 83.61% | n/a | 98.78% | 0.00% |
-| `tier1+2+3` | 16.39% | 1.64% | 83.61% | n/a | 98.78% | 0.00% |
+| `tier1` | 0.3333 [0.172, 0.546] | 1.64% [0.29%, 8.72%] | 1.64% | 98.36% | n/a | 0.00% |
+| `tier1+2` | 0.8095 [0.600, 0.923] | 16.39% [9.16%, 27.61%] | 1.64% | 83.61% | n/a | 98.78% |
+| `tier1+2+3` | 0.8095 [0.600, 0.923] | 16.39% [9.16%, 27.61%] | 1.64% | 83.61% | n/a | 98.78% |
 
 `FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
 
@@ -131,42 +136,44 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 1.79 | 0.03 | 0.10 | 1.09 |
-| `tier1+2` | 53.67 | 34.53 | 97.21 | 124.46 |
-| `tier1+2+3` | 30.60 | 34.56 | 95.55 | 125.82 |
+| `tier1` | 1.94 | 0.02 | 0.09 | 1.20 |
+| `tier1+2` | 29.64 | 35.13 | 97.50 | 134.25 |
+| `tier1+2+3` | 65.92 | 35.28 | 102.61 | 141.60 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
+Support per category runs to a few dozen entries, so read the intervals, not the point estimates: a recall of 1.0000 on 16 samples has a 95% lower bound near 0.80. These are directional results on small corpora, not precise measurements.
+
 #### `tier1`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| role_marker | 1.0000 | 0.3333 | 0.5000 | 21 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| role_marker | 1.0000 | 0.3333 | [0.172, 0.546] | 0.5000 | 21 |
 
 #### `tier1+2`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| role_marker | 1.0000 | 0.8095 | 0.8947 | 21 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| role_marker | 1.0000 | 0.8095 | [0.600, 0.923] | 0.8947 | 21 |
 
 #### `tier1+2+3`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| role_marker | 1.0000 | 0.8095 | 0.8947 | 21 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| role_marker | 1.0000 | 0.8095 | [0.600, 0.923] | 0.8947 | 21 |
 
 ## `C4` — Palisade held-out adversarial set (train_overlap: none)
 
 ### Headline metrics by tier configuration (§5)
 
-| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |
+| Configuration | Recall (95% CI) | FPR on benign (95% CI) | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate |
 |---|---|---|---|---|---|---|
-| `tier1` | 1.69% | 1.69% | 98.31% | 0.6490 | 0.00% | 0.00% |
-| `tier1+2` | 15.25% | 1.69% | 84.75% | 0.9833 | 61.31% | 0.00% |
-| `tier1+2+3` | 15.25% | 1.69% | 84.75% | 0.9833 | 61.31% | 0.00% |
+| `tier1` | 0.6422 [0.549, 0.726] | 1.69% [0.30%, 9.00%] | 1.69% | 98.31% | 0.6490 | 0.00% |
+| `tier1+2` | 0.9817 [0.936, 0.995] | 15.25% [8.24%, 26.52%] | 1.69% | 84.75% | 0.9833 | 61.31% |
+| `tier1+2+3` | 0.9817 [0.936, 0.995] | 15.25% [8.24%, 26.52%] | 1.69% | 84.75% | 0.9833 | 61.31% |
 
 `FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
 
@@ -174,44 +181,92 @@ Only `train_overlap: none` corpora may source a headline number (§3): `C3`, `C4
 
 | Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| `tier1` | 1.93 | 0.02 | 0.04 | 0.99 |
-| `tier1+2` | 0.12 | 24.55 | 38.19 | 49.44 |
-| `tier1+2+3` | 3.24 | 24.06 | 41.37 | 65.48 |
+| `tier1` | 1.88 | 0.02 | 0.05 | 1.16 |
+| `tier1+2` | 0.37 | 25.65 | 40.19 | 50.81 |
+| `tier1+2+3` | 4.07 | 25.58 | 39.56 | 43.28 |
 
 ### Per-category F1 (§5 — one row per category, plus benign)
 
+Support per category runs to a few dozen entries, so read the intervals, not the point estimates: a recall of 1.0000 on 16 samples has a 95% lower bound near 0.80. These are directional results on small corpora, not precise measurements.
+
 #### `tier1`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| delimiter_escape | 1.0000 | 0.6250 | 0.7692 | 16 |
-| encoded_payload | 1.0000 | 0.7931 | 0.8846 | 29 |
-| exfiltration | 1.0000 | 0.5417 | 0.7027 | 24 |
-| override_phrase | 1.0000 | 0.3750 | 0.5455 | 24 |
-| role_marker | 1.0000 | 0.9375 | 0.9677 | 16 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| delimiter_escape | 1.0000 | 0.6250 | [0.386, 0.815] | 0.7692 | 16 |
+| encoded_payload | 1.0000 | 0.7931 | [0.616, 0.902] | 0.8846 | 29 |
+| exfiltration | 1.0000 | 0.5417 | [0.351, 0.721] | 0.7027 | 24 |
+| override_phrase | 1.0000 | 0.3750 | [0.212, 0.573] | 0.5455 | 24 |
+| role_marker | 1.0000 | 0.9375 | [0.717, 0.989] | 0.9677 | 16 |
 
 #### `tier1+2`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
-|---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| delimiter_escape | 1.0000 | 1.0000 | 1.0000 | 16 |
-| encoded_payload | 1.0000 | 0.9655 | 0.9825 | 29 |
-| exfiltration | 1.0000 | 0.9583 | 0.9787 | 24 |
-| override_phrase | 1.0000 | 1.0000 | 1.0000 | 24 |
-| role_marker | 1.0000 | 1.0000 | 1.0000 | 16 |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| delimiter_escape | 1.0000 | 1.0000 | [0.806, 1.000] | 1.0000 | 16 |
+| encoded_payload | 1.0000 | 0.9655 | [0.828, 0.994] | 0.9825 | 29 |
+| exfiltration | 1.0000 | 0.9583 | [0.798, 0.993] | 0.9787 | 24 |
+| override_phrase | 1.0000 | 1.0000 | [0.862, 1.000] | 1.0000 | 24 |
+| role_marker | 1.0000 | 1.0000 | [0.806, 1.000] | 1.0000 | 16 |
 
 #### `tier1+2+3`
 
-| Category | Precision | Recall | F1 | Support (attacks) |
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+| delimiter_escape | 1.0000 | 1.0000 | [0.806, 1.000] | 1.0000 | 16 |
+| encoded_payload | 1.0000 | 0.9655 | [0.828, 0.994] | 0.9825 | 29 |
+| exfiltration | 1.0000 | 0.9583 | [0.798, 0.993] | 0.9787 | 24 |
+| override_phrase | 1.0000 | 1.0000 | [0.862, 1.000] | 1.0000 | 24 |
+| role_marker | 1.0000 | 1.0000 | [0.806, 1.000] | 1.0000 | 16 |
+
+## `FP-CONTROL` — JBB-Behaviors benign half (independent FP control) (benign-only control set)
+
+Not one of the 4 registered corpora (§2) and never merged into them. It carries no attacks, so it measures false positives and nothing else — and unlike C4, whose benign half deliberately includes injection-shaped near-misses, these are ordinary prompts. Read the two together: this is the easy case, C4 is the hard one.
+
+### Headline metrics by tier configuration (§5)
+
+| Configuration | Recall (95% CI) | FPR on benign (95% CI) | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate |
+|---|---|---|---|---|---|---|
+| `tier1` | n/a | 0.00% [0.00%, 4.58%] | 0.00% | 100.00% | n/a | 0.00% |
+| `tier1+2` | n/a | 1.25% [0.22%, 6.75%] | 0.00% | 98.75% | n/a | 100.00% |
+| `tier1+2+3` | n/a | 1.25% [0.22%, 6.75%] | 0.00% | 98.75% | n/a | 100.00% |
+
+`FPR on benign` counts every non-allow verdict; `Blocked on benign` counts only hard blocks. They differ because Tier 2 escalation is capped at `tier2.action` (default `warn`), so a Tier 2 flag on a clean request is surfaced, not refused. Reporting only the first column would read as though those requests were turned away.
+
+`n/a`: this corpus ships no paraphrase groups, so paraphrase consistency is undefined over it. It is not zero — it is unmeasurable, and reporting 0.0000 here would be a lie.
+
+### Latency — 4 columns, never collapsed (§5)
+
+| Configuration | cold_first_call_ms | warm_p50_ms | warm_p95_ms | warm_p99_ms |
 |---|---|---|---|---|
-| benign | 0.0000 | 0.0000 | 0.0000 | 0 |
-| delimiter_escape | 1.0000 | 1.0000 | 1.0000 | 16 |
-| encoded_payload | 1.0000 | 0.9655 | 0.9825 | 29 |
-| exfiltration | 1.0000 | 0.9583 | 0.9787 | 24 |
-| override_phrase | 1.0000 | 1.0000 | 1.0000 | 24 |
-| role_marker | 1.0000 | 1.0000 | 1.0000 | 16 |
+| `tier1` | 2.29 | 0.01 | 0.03 | 1.25 |
+| `tier1+2` | 28.71 | 24.69 | 31.46 | 52.19 |
+| `tier1+2+3` | 29.18 | 24.31 | 33.90 | 44.13 |
+
+### Per-category F1 (§5 — one row per category, plus benign)
+
+Support per category runs to a few dozen entries, so read the intervals, not the point estimates: a recall of 1.0000 on 16 samples has a 95% lower bound near 0.80. These are directional results on small corpora, not precise measurements.
+
+#### `tier1`
+
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+
+#### `tier1+2`
+
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
+
+#### `tier1+2+3`
+
+| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |
+|---|---|---|---|---|---|
+| benign | 0.0000 | 0.0000 | [0.000, 0.000] | 0.0000 | 0 |
 
 ## Reading the paraphrase-consistency column
 

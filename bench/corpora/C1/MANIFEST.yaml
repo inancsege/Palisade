@@ -6,7 +6,7 @@ language: German + English
 role: "Cross-lingual signal"
 source: "https://huggingface.co/datasets/deepset/prompt-injections"
 pinned_revision: 4f61ecb038e9c3fb77e21034b22511b523772cdd
-snapshot_date: 2026-09-07
+snapshot_date: 2026-09-08
 train_overlap: partial
 contamination_note: >
   Public dataset predating the Tier 2 model. The classifier was very likely trained on

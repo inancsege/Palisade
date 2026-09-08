@@ -1,0 +1,19 @@
+# Snapshot written by bench/fetch-corpora.mjs — do not hand-edit.
+corpus_id: FP-CONTROL
+name: "JBB-Behaviors benign half (independent FP control)"
+license: "MIT"
+language: English
+role: "False-positive control — benign prose, no attacks"
+source: "https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors"
+pinned_revision: 886acc352a31533ffbcf4ef22c744658688086fc
+snapshot_date: 2026-09-08
+train_overlap: none
+contamination_note: >
+  Benign-only control set registered in protocol §2. Carries no attacks, so it measures
+  false positives and nothing else. These are ordinary prompts, NOT adversarial near-misses —
+  read it alongside C4, whose benign half deliberately includes injection-shaped controls.
+attack_count: 0
+attacks_sha256: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+benign_count: 100
+benign_sha256: d5a3ff69acb5127b8ee6a5c2afb659df2f2e5b53d454d79e24bac47c3d710d73
+benign_source: "own (the dataset benign split)"

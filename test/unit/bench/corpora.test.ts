@@ -11,10 +11,12 @@ import {
 } from '../../../src/bench/corpora.js';
 
 describe('corpus registry (protocol §2)', () => {
-  it('registers exactly the 4 pre-registered corpora', () => {
-    // §2 fixes a 4-corpus hard cap as an exclusion criterion. A 5th entry here means a
-    // corpus was added after registration, which voids the pre-registration claim.
-    expect(CORPORA.map((c) => c.id)).toEqual(['C1', 'C2', 'C3', 'C4']);
+  it('registers exactly the 4 pre-registered corpora, plus the §2 control set', () => {
+    // §2 fixes a 4-corpus hard cap as an exclusion criterion. A 5th CORPUS here would void
+    // the pre-registration claim; the FP control set is a separate registered entity and
+    // must stay flagged as one so it is never counted or merged as a corpus.
+    expect(CORPORA.filter((c) => !c.controlSet).map((c) => c.id)).toEqual(['C1', 'C2', 'C3', 'C4']);
+    expect(CORPORA.filter((c) => c.controlSet).map((c) => c.id)).toEqual(['FP-CONTROL']);
   });
 
   it('points the attack-only corpora at the shared FP control set (§2)', () => {
@@ -60,7 +62,7 @@ describe('verifyPin (protocol §7)', () => {
 
 describe('loadRegisteredCorpus', () => {
   it('loads every registered corpus with its pin intact and its contamination class set', () => {
-    for (const descriptor of CORPORA) {
+    for (const descriptor of CORPORA.filter((c) => !c.controlSet)) {
       const corpus = loadRegisteredCorpus(descriptor);
       expect(corpus.id).toBe(descriptor.id);
       expect(corpus.entries.length).toBeGreaterThan(0);
@@ -75,7 +77,7 @@ describe('loadRegisteredCorpus', () => {
     // Paraphrase consistency is the D03/D04 signal and is only defined over C4's groups;
     // the flag is what keeps the other corpora from rendering a misleading 0.0000.
     const byId = Object.fromEntries(
-      CORPORA.map((d) => [d.id, loadRegisteredCorpus(d).hasParaphraseGroups]),
+      CORPORA.filter((d) => !d.controlSet).map((d) => [d.id, loadRegisteredCorpus(d).hasParaphraseGroups]),
     );
     expect(byId.C4).toBe(true);
     expect(byId.C1).toBe(false);
@@ -85,7 +87,7 @@ describe('loadRegisteredCorpus', () => {
 
   it('marks the public contaminated corpora as such (§3)', () => {
     const overlap = Object.fromEntries(
-      CORPORA.map((d) => [d.id, loadRegisteredCorpus(d).trainOverlap]),
+      CORPORA.filter((d) => !d.controlSet).map((d) => [d.id, loadRegisteredCorpus(d).trainOverlap]),
     );
     // C1/C2 are public corpora the Tier 2 model was very likely trained on — reporting a
     // headline number off them would be an in-distribution result dressed as generalization.
@@ -98,5 +100,22 @@ describe('loadRegisteredCorpus', () => {
     const dir = mkdtempSync(join(tmpdir(), 'palisade-empty-'));
     mkdirSync(join(dir, 'nope'), { recursive: true });
     expect(() => loadRegisteredCorpus({ id: 'CX', dir: 'nope' }, dir)).toThrow();
+  });
+});
+
+describe('FP control set (protocol §2)', () => {
+  it('carries benign entries only, so it can never source a recall number', () => {
+    const control = loadRegisteredCorpus(CORPORA.find((c) => c.controlSet)!);
+    expect(control.entries.length).toBe(100);
+    expect(control.entries.every((e) => e.label === 'benign')).toBe(true);
+  });
+
+  it('is kept out of C4 so it cannot dilute the deliberate near-miss controls', () => {
+    // Merging 100 ordinary prompts into C4's benign half would drop the measured FPR for
+    // the wrong reason — the hard cases would just be outnumbered.
+    const c4 = loadRegisteredCorpus(CORPORA.find((c) => c.id === 'C4')!);
+    const control = loadRegisteredCorpus(CORPORA.find((c) => c.controlSet)!);
+    const c4Texts = new Set(c4.entries.map((e) => e.text));
+    expect(control.entries.some((e) => c4Texts.has(e.text))).toBe(false);
   });
 });

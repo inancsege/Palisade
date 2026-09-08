@@ -30,6 +30,8 @@ export interface CategoryRow {
   f1: number;
   /** Number of ATTACK entries in this category (the positives). */
   support: number;
+  /** 95% Wilson interval on recall — at these sample sizes the point estimate alone misleads. */
+  recallCi: [number, number];
 }
 
 export function confusionFor(predictions: Prediction[]): Confusion {
@@ -42,6 +44,24 @@ export function confusionFor(predictions: Prediction[]): Confusion {
     else c.tn++;
   }
   return c;
+}
+
+/**
+ * Wilson score interval for a binomial proportion, at ~95% (z = 1.96).
+ *
+ * Every rate in this report is a proportion over a small sample — per-category support runs
+ * 16-29 entries — and a bare point estimate at that size invites more confidence than the
+ * data supports. Wilson is used rather than the normal approximation because it stays inside
+ * [0,1] and remains sane at p = 0 and p = 1, which is exactly where these land.
+ */
+export function wilsonInterval(successes: number, n: number, z = 1.96): [lo: number, hi: number] {
+  if (n === 0) return [0, 0];
+  const p = successes / n;
+  const z2 = z * z;
+  const denominator = 1 + z2 / n;
+  const centre = (p + z2 / (2 * n)) / denominator;
+  const spread = (z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))) / denominator;
+  return [Math.max(0, centre - spread), Math.min(1, centre + spread)];
 }
 
 /** Guarded division: an undefined ratio reports 0 rather than NaN. */
@@ -81,6 +101,7 @@ export function perCategoryF1(predictions: Prediction[]): CategoryRow[] {
         recall: recallOf(c),
         f1: f1Of(c),
         support: c.tp + c.fn,
+        recallCi: wilsonInterval(c.tp, c.tp + c.fn),
       };
     })
     .sort((a, b) => a.category.localeCompare(b.category));
@@ -90,6 +111,18 @@ export function perCategoryF1(predictions: Prediction[]): CategoryRow[] {
 export function falsePositiveRate(predictions: Prediction[]): number {
   const benign = predictions.filter((p) => p.label === 'benign');
   return ratio(benign.filter((p) => p.detected).length, benign.length);
+}
+
+/** 95% Wilson interval on the false-positive rate. */
+export function falsePositiveRateCi(predictions: Prediction[]): [number, number] {
+  const benign = predictions.filter((p) => p.label === 'benign');
+  return wilsonInterval(benign.filter((p) => p.detected).length, benign.length);
+}
+
+/** Overall recall across every attack category, with its 95% Wilson interval. */
+export function overallRecall(predictions: Prediction[]): { value: number; ci: [number, number] } {
+  const c = confusionFor(predictions.filter((p) => p.label === 'attack'));
+  return { value: recallOf(c), ci: wilsonInterval(c.tp, c.tp + c.fn) };
 }
 
 /**

@@ -21,6 +21,13 @@ export interface CorpusDescriptor {
   dir: string;
   /** Overridden for attack-only corpora that borrow the shared FP control set. */
   benignPath?: string;
+  /**
+   * A benign-only control set rather than one of the 4 registered corpora (§2). Reported
+   * separately and NEVER merged into a corpus: these are ordinary prompts, so folding them
+   * into C4 would dilute its deliberate near-miss controls and improve the false-positive
+   * rate for the wrong reason.
+   */
+  controlSet?: boolean;
 }
 
 const SHARED_BENIGN = join('bench', 'corpus', 'benign.jsonl');
@@ -30,6 +37,7 @@ export const CORPORA: CorpusDescriptor[] = [
   { id: 'C2', dir: join('bench', 'corpora', 'C2'), benignPath: SHARED_BENIGN },
   { id: 'C3', dir: join('bench', 'corpora', 'C3'), benignPath: SHARED_BENIGN },
   { id: 'C4', dir: join('bench', 'corpus') },
+  { id: 'FP-CONTROL', dir: join('bench', 'corpora', 'FP-CONTROL'), controlSet: true },
 ];
 
 interface Manifest {

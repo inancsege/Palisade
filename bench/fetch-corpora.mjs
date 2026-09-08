@@ -26,6 +26,7 @@ const PINS = {
   C1: '4f61ecb038e9c3fb77e21034b22511b523772cdd', // huggingface.co/datasets/deepset/prompt-injections
   C2: '04737b65e90a6794ec227012e4a255a7def6344b', // huggingface.co/datasets/Lakera/gandalf_ignore_instructions
   C3: '089ed468cf3ed0322acc66b0211f26d9d90dbf60', // github.com/ethz-spylab/agentdojo
+  'FP-CONTROL': '886acc352a31533ffbcf4ef22c744658688086fc', // huggingface.co/datasets/JailbreakBench/JBB-Behaviors
 };
 
 async function getJson(url) {
@@ -35,12 +36,12 @@ async function getJson(url) {
 }
 
 /** The datasets-server caps a page at 100 rows, so walk offsets until the split is drained. */
-async function hfRows(dataset, split) {
+async function hfRows(dataset, split, config = 'default') {
   const rows = [];
   for (let offset = 0; ; offset += 100) {
     const url =
       `https://datasets-server.huggingface.co/rows?dataset=${encodeURIComponent(dataset)}` +
-      `&config=default&split=${split}&offset=${offset}&length=100`;
+      `&config=${config}&split=${split}&offset=${offset}&length=100`;
     const page = await getJson(url);
     rows.push(...page.rows.map((r) => r.row));
     if (rows.length >= page.num_rows_total) return rows;
@@ -198,5 +199,34 @@ write({
     text,
     label: 'attack',
     category: 'role_marker',
+  })),
+});
+
+// The FP control set §2 registered but never fetched. Reported SEPARATELY from C1-C4 and
+// never merged into them: these are ordinary prose prompts with nothing injection-shaped
+// about them, so folding them into C4 would dilute its deliberate near-miss controls and
+// improve the false-positive rate for the wrong reason.
+console.log('FP-CONTROL JailbreakBench/JBB-Behaviors (benign split) ...');
+const control = await hfRows('JailbreakBench/JBB-Behaviors', 'benign', 'behaviors');
+write({
+  id: 'FP-CONTROL',
+  name: 'JBB-Behaviors benign half (independent FP control)',
+  license: 'MIT',
+  language: 'English',
+  role: 'False-positive control — benign prose, no attacks',
+  source: 'https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors',
+  trainOverlap: 'none',
+  contamination: [
+    'Benign-only control set registered in protocol §2. Carries no attacks, so it measures',
+    'false positives and nothing else. These are ordinary prompts, NOT adversarial near-misses —',
+    'read it alongside C4, whose benign half deliberately includes injection-shaped controls.',
+  ],
+  benignSource: 'own (the dataset benign split)',
+  attacks: [],
+  benign: control.map((r, i) => ({
+    id: `fp-${i}`,
+    text: r.Goal,
+    label: 'benign',
+    category: 'benign',
   })),
 });

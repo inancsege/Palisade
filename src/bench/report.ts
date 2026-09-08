@@ -74,6 +74,9 @@ export interface ConfigurationResult {
   configuration: TierConfiguration;
   categories: CategoryRow[];
   falsePositiveRate: number;
+  falsePositiveRateCi: [number, number];
+  overallRecall: number;
+  overallRecallCi: [number, number];
   blockRateOnBenign: number;
   trueNegativeRate: number;
   paraphraseConsistency: number;
@@ -91,6 +94,8 @@ export interface CorpusResult {
     entries: number;
     /** Paraphrase consistency is undefined without groups; rendered `n/a` rather than 0. */
     hasParaphraseGroups: boolean;
+    /** Benign-only control set, reported separately from the 4 registered corpora. */
+    controlSet?: boolean;
   };
   evaluated: number;
   results: ConfigurationResult[];
@@ -123,6 +128,8 @@ export const PARAPHRASE_SHIP_THRESHOLD = 0.75;
 const pct = (x: number): string => `${(x * 100).toFixed(2)}%`;
 const num = (x: number): string => x.toFixed(4);
 const ms = (x: number): string => x.toFixed(2);
+const ci = ([lo, hi]: [number, number]): string => `[${lo.toFixed(3)}, ${hi.toFixed(3)}]`;
+const ciPct = ([lo, hi]: [number, number]): string => `[${pct(lo)}, ${pct(hi)}]`;
 
 /**
  * Render the published tables. The protocol forbids collapsing or omitting any locked
@@ -175,21 +182,36 @@ export function renderReport(input: ReportInput): string {
   lines.push('');
 
   for (const c of input.corpora) {
-    lines.push(`## \`${c.corpus.id}\` — ${c.corpus.name} (train_overlap: ${c.corpus.trainOverlap})`);
+    const label = c.corpus.controlSet
+      ? `## \`${c.corpus.id}\` — ${c.corpus.name} (benign-only control set)`
+      : `## \`${c.corpus.id}\` — ${c.corpus.name} (train_overlap: ${c.corpus.trainOverlap})`;
+    lines.push(label);
     lines.push('');
+    if (c.corpus.controlSet) {
+      lines.push(
+        'Not one of the 4 registered corpora (§2) and never merged into them. It carries no ' +
+          'attacks, so it measures false positives and nothing else — and unlike C4, whose benign ' +
+          'half deliberately includes injection-shaped near-misses, these are ordinary prompts. ' +
+          'Read the two together: this is the easy case, C4 is the hard one.',
+      );
+      lines.push('');
+    }
 
     lines.push('### Headline metrics by tier configuration (§5)');
     lines.push('');
     lines.push(
-      '| Configuration | FPR on benign | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate | T2/T3 disagreement |',
+      '| Configuration | Recall (95% CI) | FPR on benign (95% CI) | Blocked on benign | TNR on benign | Paraphrase consistency | Tier 2 firing rate |',
     );
     lines.push('|---|---|---|---|---|---|---|');
     for (const r of c.results) {
       const consistency = c.corpus.hasParaphraseGroups ? num(r.paraphraseConsistency) : 'n/a';
+      const recall = c.corpus.controlSet
+        ? 'n/a'
+        : `${num(r.overallRecall)} ${ci(r.overallRecallCi)}`;
       lines.push(
-        `| \`${r.configuration}\` | ${pct(r.falsePositiveRate)} | ${pct(r.blockRateOnBenign)} | ` +
-          `${pct(r.trueNegativeRate)} | ${consistency} | ${pct(r.tier2FiringRate)} | ` +
-          `${pct(r.tierDisagreementRate)} |`,
+        `| \`${r.configuration}\` | ${recall} | ${pct(r.falsePositiveRate)} ${ciPct(r.falsePositiveRateCi)} | ` +
+          `${pct(r.blockRateOnBenign)} | ${pct(r.trueNegativeRate)} | ${consistency} | ` +
+          `${pct(r.tier2FiringRate)} |`,
       );
     }
     lines.push('');
@@ -222,14 +244,21 @@ export function renderReport(input: ReportInput): string {
 
     lines.push('### Per-category F1 (§5 — one row per category, plus benign)');
     lines.push('');
+    lines.push(
+      'Support per category runs to a few dozen entries, so read the intervals, not the point ' +
+        'estimates: a recall of 1.0000 on 16 samples has a 95% lower bound near 0.80. These are ' +
+        'directional results on small corpora, not precise measurements.',
+    );
+    lines.push('');
     for (const r of c.results) {
       lines.push(`#### \`${r.configuration}\``);
       lines.push('');
-      lines.push('| Category | Precision | Recall | F1 | Support (attacks) |');
-      lines.push('|---|---|---|---|---|');
+      lines.push('| Category | Precision | Recall | 95% CI on recall | F1 | Support (attacks) |');
+      lines.push('|---|---|---|---|---|---|');
       for (const row of r.categories) {
         lines.push(
-          `| ${row.category} | ${num(row.precision)} | ${num(row.recall)} | ${num(row.f1)} | ${row.support} |`,
+          `| ${row.category} | ${num(row.precision)} | ${num(row.recall)} | ${ci(row.recallCi)} | ` +
+            `${num(row.f1)} | ${row.support} |`,
         );
       }
       lines.push('');

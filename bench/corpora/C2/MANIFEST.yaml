@@ -6,7 +6,7 @@ language: English
 role: "Canonical ignore-instructions corpus"
 source: "https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions"
 pinned_revision: 04737b65e90a6794ec227012e4a255a7def6344b
-snapshot_date: 2026-09-07
+snapshot_date: 2026-09-08
 train_overlap: partial
 contamination_note: >
   The canonical public ignore-instructions corpus. Almost certainly inside the Tier 2

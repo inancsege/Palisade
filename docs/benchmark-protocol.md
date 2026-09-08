@@ -70,6 +70,18 @@ test in plan 1-02.
 - Palisade v0.1's 67-case false-positive regression suite (`test/fixtures/benign/*.txt`), extended
   with base64-of-benign cases for the D15 base64 rescan.
 
+**Fetched 2026-09-08** (registered here at pre-registration, snapshotted in Phase 3):
+`JailbreakBench/JBB-Behaviors`, config `behaviors`, split `benign`, pinned revision
+`886acc352a31533ffbcf4ef22c744658688086fc`, 100 entries, sha256 in
+`bench/corpora/FP-CONTROL/MANIFEST.yaml`.
+
+It is reported as its own section and is **never merged into C1-C4**. These are ordinary prompts
+with nothing injection-shaped about them, whereas C4's benign half deliberately includes
+injection-shaped near-misses (code that sets `role: 'system'`, documentation *about* injection, a
+legitimate `curl` with a bearer token). Merging the two would lower the measured false-positive rate
+by outnumbering the hard cases rather than by handling them, which is the corpus-dilution failure
+§3 exists to prevent. The two numbers are reported side by side instead.
+
 ---
 
 ## 3. Contamination Disclosure (the core credibility mechanic)
@@ -104,6 +116,9 @@ not a generalization result. This protocol makes contamination explicit:
 Every metric below appears in the published tables. None may be collapsed or omitted.
 
 - **Per-category F1** — one row per `PatternCategory` plus a `benign` row (PITFALLS P1.5).
+- **95% Wilson confidence interval** on every recall and false-positive rate. Added in Phase 3: per-category
+  support runs 16-29 entries, and a bare point estimate at that size claims more precision than the
+  data carries. This is a reporting addition, not a change to what is measured.
 - **FPR-on-benign** — a first-class column in every table (never hidden).
 - **TNR-on-benign** (specificity) — paired to TPR.
 - **Paraphrase consistency** — the dominant ship/no-ship signal for Tier 2; **ship threshold ≥ 0.75**
