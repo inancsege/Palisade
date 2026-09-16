@@ -2,11 +2,13 @@ name: CI
 
 # The always-on gate: lint, typecheck, build and the full unit suite with the 80% coverage
 # threshold. Kept separate from onnx-matrix.yml, which is path-triggered and downloads a
-# 700MB model — this one must stay fast enough to run on every push and PR.
+# 700MB model — this one must stay fast enough to run on every PR and every push to main.
 
 on:
+  # Only main: any other branch is covered by the pull_request trigger, and listing '**' here
+  # made every PR branch run the whole matrix twice.
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
